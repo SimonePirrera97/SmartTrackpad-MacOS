@@ -1,0 +1,46 @@
+# Keep this repository limited to build inputs and its public README.
+/*
+!/.gitignore
+!/README.md
+!/project.yml
+!/apps/
+!/packages/
+!/assets/
+!/SmartTrackpad.xcodeproj/
+
+# Apple adapters, application metadata and app icons.
+/apps/**
+!/apps/**/
+!/apps/**/*.swift
+!/apps/**/Info.plist
+!/apps/**/Assets.xcassets/**
+
+# Portable Swift modules used by both targets.
+/packages/**
+!/packages/**/
+!/packages/**/Sources/**/*.swift
+
+# License resource referenced by both Xcode targets.
+/assets/**
+!/assets/lucide/
+!/assets/lucide/LICENSE
+
+# Share the generated project and schemes, not personal Xcode state.
+/SmartTrackpad.xcodeproj/**
+!/SmartTrackpad.xcodeproj/project.pbxproj
+!/SmartTrackpad.xcodeproj/project.xcworkspace/
+!/SmartTrackpad.xcodeproj/project.xcworkspace/contents.xcworkspacedata
+!/SmartTrackpad.xcodeproj/xcshareddata/
+!/SmartTrackpad.xcodeproj/xcshareddata/xcschemes/
+!/SmartTrackpad.xcodeproj/xcshareddata/xcschemes/*.xcscheme
+
+# Generated files and local settings are excluded wherever they occur.
+.DS_Store
+build/
+DerivedData/
+.build/
+xcuserdata/
+*.xcuserstate
+*.log
+*.ipa
+*.dSYM/
