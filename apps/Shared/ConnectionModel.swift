@@ -8,6 +8,7 @@ final class ConnectionModel: ObservableObject {
     enum Role { case client, server }
     static let port: UInt16 = 47821
     static let bonjourType = "_smarttrackpad._tcp"
+    static let cableBonjourType = "_stpad-usb._tcp"
 
     @Published var status = "Not connected"
     @Published var pairingCode = ""
@@ -32,7 +33,20 @@ final class ConnectionModel: ObservableObject {
     private var inputQueue = InputQueue()
     private var inputInFlight = false
 
+    #if os(macOS)
+    let boardUSB = USBSerialTransport()
+    #endif
+    let bluetooth: BluetoothTransport
+    @Published private(set) var activeTransport: ConnectionTransport = .wifi
+    @Published private(set) var routeDescription = "No route"
     private let role: Role
+    @Published private(set) var cableStatus = "Connect an iPad USB cable, then start connections"
+    @Published private(set) var directCableSession = false
+    var sessionAuthorized: Bool { authenticated || directCableSession }
+    private let cableNetwork = DirectCableNetwork()
+    private var cableListeners: [String: NWListener] = [:]
+    private var boardListener: NWListener?
+    private var currentCableInterfaceName: String?
     private var listener: NWListener?
     private var connection: NWConnection?
     private var framer = LineFramer()
@@ -51,8 +65,142 @@ final class ConnectionModel: ObservableObject {
 
     init(role: Role) {
         self.role = role
+        bluetooth = BluetoothTransport(server: role == .server)
         localCapabilities = InputKind.supportedCapabilities.filter {
             role == .client || !$0.hasSuffix(".experimental")
+        }
+        #if os(macOS)
+        boardUSB.onFailure = { [weak self] reason in
+            guard let self, self.active, self.activeTransport == .wired else { return }
+            self.disconnect(reason: reason)
+        }
+        #endif
+        // Pace input at BLE delivery, rather than loopback TCP kernel acceptance.
+        // Heartbeat/TLS records may share a read; the bounded input FIFO still
+        // coalesces motion while acknowledged ATT writes are in progress.
+        bluetooth.onDrain = { [weak self] in
+            guard let self, self.role == .client, self.activeTransport == .bluetooth, self.inputInFlight else { return }
+            self.inputInFlight = false
+            self.flushInput()
+        }
+        cableNetwork.onChange = { [weak self] interfaces in self?.updateCableListeners(interfaces) }
+        bluetooth.canAccept = { [weak self] in self?.active == false }
+        bluetooth.onFailure = { [weak self] reason in
+            guard let self, self.active, self.activeTransport == .bluetooth else { return }
+            self.disconnect(reason: reason)
+        }
+    }
+
+    private func updateCableListeners(_ interfaces: [DirectCableNetwork.Link]) {
+        guard role == .server, listener != nil else { return }
+        let names = Set(interfaces.map(\.name))
+        if let currentCableInterfaceName, !names.contains(currentCableInterfaceName) {
+            disconnect(reason: "USB cable disconnected")
+        }
+        let ids = Set(interfaces.map(\.id))
+        for name in Array(cableListeners.keys) where !ids.contains(name) {
+            cableListeners.removeValue(forKey: name)?.cancel()
+        }
+        for interface in interfaces where cableListeners[interface.id] == nil {
+            do {
+                let parameters = NWParameters.tcp
+                parameters.requiredLocalEndpoint = .hostPort(host: NWEndpoint.Host(interface.address), port: .any)
+                let next = try NWListener(using: parameters)
+                cableListeners[interface.id] = next
+                #if os(macOS)
+                next.service = NWListener.Service(name: "\(Host.current().localizedName ?? "Smart Trackpad Mac") · USB \(interface.name)",
+                                                  type: Self.cableBonjourType, domain: "local.")
+                #endif
+                next.newConnectionHandler = { [weak self, weak next] peer in
+                    Task { @MainActor in
+                        guard let self, let next, self.cableListeners[interface.id] === next, !self.active else { peer.cancel(); return }
+                        self.attach(peer, directCable: true, cableInterface: interface)
+                    }
+                }
+                next.stateUpdateHandler = { [weak self, weak next] state in
+                    Task { @MainActor in
+                        guard let self, let next, self.cableListeners[interface.id] === next else { return }
+                        switch state {
+                        case .ready: self.cableStatus = "Direct USB cable ready · no pairing required"
+                        case .failed(let error): self.cableStatus = "USB cable unavailable: \(error.localizedDescription)"
+                        default: break
+                        }
+                    }
+                }
+                next.start(queue: .main)
+            } catch { cableStatus = "Cannot start cable connection: \(error.localizedDescription)" }
+        }
+        if interfaces.isEmpty { cableStatus = "No direct iPad USB cable detected" }
+    }
+
+    func connectCable(to endpoint: NWEndpoint) {
+        guard role == .client else { return }
+        guard case .service(_, let type, _, let interface) = endpoint,
+              type.trimmingCharacters(in: CharacterSet(charactersIn: ".")) == Self.cableBonjourType, let interface,
+              interface.type != .wifi, interface.type != .cellular, interface.type != .loopback else {
+            status = "No direct USB endpoint selected"
+            return
+        }
+        disconnect()
+        activeTransport = .wired
+        session = UUID().uuidString
+        let parameters = NWParameters.tcp
+        ConnectionTransport.wired.configure(parameters)
+        parameters.requiredInterface = interface
+        let peer = NWConnection(to: endpoint, using: parameters)
+        attach(peer, directCable: true)
+    }
+
+    #if os(macOS)
+    func openBoardUSB(path: String) {
+        guard role == .server, !active else { return }
+        if listener == nil { startListening() }
+        guard listener != nil else { return }
+        do {
+            let parameters = NWParameters.tcp
+            parameters.requiredLocalEndpoint = .hostPort(host: "127.0.0.1", port: .any)
+            let next = try NWListener(using: parameters)
+            boardListener = next
+            next.newConnectionHandler = { [weak self, weak next] peer in
+                Task { @MainActor in
+                    guard let self, let next, self.boardListener === next, self.boardUSB.opened, !self.active else { peer.cancel(); return }
+                    self.attach(peer, directCable: true)
+                }
+            }
+            next.stateUpdateHandler = { [weak self, weak next] state in
+                Task { @MainActor in
+                    guard let self, let next, self.boardListener === next else { return }
+                    if case .ready = state, let port = next.port { self.boardUSB.start(path: path, targetPort: port.rawValue) }
+                    else if case .failed(let error) = state { self.status = "Board USB listener failed: \(error.localizedDescription)" }
+                }
+            }
+            next.start(queue: .main)
+        } catch { status = "Cannot start board USB: \(error.localizedDescription)" }
+    }
+    #endif
+
+    func enableBluetooth() {
+        if role == .server && listener == nil { startListening() }
+        guard role == .client || listener != nil else { return }
+        bluetooth.start(targetPort: Self.port)
+    }
+
+    func connectBluetooth(id: UUID, key: String) {
+        guard role == .client else { return }
+        let secret: Data
+        do { secret = try PairingSecret.decode(key) }
+        catch { status = error.localizedDescription; return }
+        disconnect()
+        activeTransport = .bluetooth
+        active = true
+        session = UUID().uuidString
+        pairingCode = String(format: "%06d", Int.random(in: 0...999999))
+        status = "Connecting over Bluetooth…"
+        bluetooth.connect(id: id) { [weak self] port in
+            guard let self, self.active, self.activeTransport == .bluetooth else { return }
+            let peer = NWConnection(host: "127.0.0.1", port: NWEndpoint.Port(rawValue: port)!,
+                                    using: SecureTransport.parameters(key: secret))
+            self.attach(peer)
         }
     }
 
@@ -67,6 +215,7 @@ final class ConnectionModel: ObservableObject {
         Smart Trackpad · protocol \(WireMessage.currentVersion)
         Role: \(role == .server ? "Mac" : "iPad")
         Status: \(status)
+        Transport: \(activeTransport.title), route: \(routeDescription)
         Last disconnect: \(lastDisconnectReason)
         Listening: \(listening), active: \(active), TLS authenticated: \(authenticated), approved: \(connected)
         Sent: \(messagesSent), received: \(messagesReceived), queued input: \(inputQueue.count)
@@ -85,6 +234,7 @@ final class ConnectionModel: ObservableObject {
                                                     type: Self.bonjourType, domain: "local.")
             #endif
             listener = newListener
+            cableNetwork.start()
             updateNetworkActivity()
             pairingKey = key
             status = "Starting listener…"
@@ -115,6 +265,14 @@ final class ConnectionModel: ObservableObject {
     }
 
     func stopListening() {
+        cableNetwork.stop()
+        for next in cableListeners.values { next.cancel() }
+        cableListeners = [:]
+        cableStatus = "Cable connections stopped"
+        bluetooth.stop()
+        #if os(macOS)
+        boardUSB.stop()
+        #endif
         listener?.cancel()
         listener = nil
         listening = false
@@ -122,7 +280,7 @@ final class ConnectionModel: ObservableObject {
         disconnect()
     }
 
-    func connect(host: String, key: String) {
+    func connect(host: String, key: String, transport: ConnectionTransport? = nil) {
         guard role == .client else { return }
         let invitation: PairingInvitation
         let parameters: NWParameters
@@ -131,26 +289,45 @@ final class ConnectionModel: ObservableObject {
             parameters = SecureTransport.parameters(key: try PairingSecret.decode(invitation.key))
         }
         catch { status = error.localizedDescription; return }
+        transport?.configure(parameters)
         connect(to: .hostPort(host: NWEndpoint.Host(invitation.host),
-                              port: NWEndpoint.Port(rawValue: invitation.port)!), parameters: parameters)
+                              port: NWEndpoint.Port(rawValue: invitation.port)!), parameters: parameters, transport: transport ?? .wifi)
     }
 
-    func connect(to endpoint: NWEndpoint, key: String) {
+    func connect(to endpoint: NWEndpoint, key: String, transport: ConnectionTransport? = nil) {
         guard role == .client else { return }
-        do { connect(to: endpoint, parameters: SecureTransport.parameters(key: try PairingSecret.decode(key))) }
+        do {
+            let parameters = SecureTransport.parameters(key: try PairingSecret.decode(key))
+            transport?.configure(parameters)
+            connect(to: endpoint, parameters: parameters, transport: transport ?? .wifi)
+        }
         catch { status = error.localizedDescription }
     }
 
-    private func connect(to endpoint: NWEndpoint, parameters: NWParameters) {
+    private func connect(to endpoint: NWEndpoint, parameters: NWParameters, transport: ConnectionTransport) {
         disconnect()
+        activeTransport = transport
         session = UUID().uuidString
         pairingCode = String(format: "%06d", Int.random(in: 0...999999))
         let peer = NWConnection(to: endpoint, using: parameters)
         attach(peer)
     }
 
-    private func attach(_ peer: NWConnection) {
+    private func attach(_ peer: NWConnection, directCable: Bool = false, cableInterface: DirectCableNetwork.Link? = nil) {
+        directCableSession = directCable
+        currentCableInterfaceName = cableInterface?.name
         connection = peer
+        if directCable { activeTransport = .wired }
+        else if role == .server {
+            if case .hostPort(let host, _) = peer.endpoint,
+               host == NWEndpoint.Host("127.0.0.1") || host == NWEndpoint.Host("::1") {
+                #if os(macOS)
+                activeTransport = boardUSB.opened ? .wired : (bluetooth.hasSession ? .bluetooth : .wifi)
+                #else
+                activeTransport = .bluetooth
+                #endif
+            } else { activeTransport = .wifi }
+        }
         updateNetworkActivity()
         active = true
         sent = 0
@@ -163,24 +340,55 @@ final class ConnectionModel: ObservableObject {
         framer = LineFramer()
         if role == .server { session = ""; pairingCode = "" }
         lastReceived = ProcessInfo.processInfo.systemUptime
-        status = role == .server ? "Receiving pairing request…" : "Connecting…"
+        status = role == .server ? (directCable ? "Starting cable session…" : "Receiving pairing request…") : "Connecting…"
         peer.stateUpdateHandler = { [weak self, weak peer] state in
             Task { @MainActor in
                 guard let self, let peer, self.connection === peer else { return }
                 switch state {
                 case .ready:
-                    guard SecureTransport.authenticated(peer) else {
+                    if let cableInterface {
+                        guard let path = peer.currentPath,
+                              path.availableInterfaces.contains(where: { $0.name == cableInterface.name }),
+                              !path.usesInterfaceType(.wifi), !path.usesInterfaceType(.cellular) else {
+                            self.disconnect(reason: "Rejected connection outside the direct USB interface")
+                            return
+                        }
+                    }
+                    guard self.directCableSession || SecureTransport.authenticated(peer) else {
                         self.disconnect(reason: "TLS authentication failed · no connection accepted")
                         return
                     }
-                    self.authenticated = true
+                    #if os(macOS)
+                    let serialRoute = self.boardUSB.opened && self.activeTransport == .wired
+                    #else
+                    let serialRoute = false
+                    #endif
+                    if serialRoute {
+                        self.routeDescription = "Board USB serial · direct CDC/UART"
+                    } else if self.activeTransport == .bluetooth {
+                        self.routeDescription = "Bluetooth LE · TLS over GATT"
+                    } else if self.directCableSession {
+                        self.routeDescription = "Direct USB cable · no TLS or pairing"
+                    } else if peer.currentPath?.usesInterfaceType(.wiredEthernet) == true {
+                        self.activeTransport = .wired
+                        self.routeDescription = self.directCableSession ? "Direct USB cable · no TLS or pairing" : "Wired Ethernet"
+                    } else {
+                        self.routeDescription = peer.currentPath.map { String(describing: $0) } ?? "Unknown network route"
+                    }
+                    self.authenticated = !self.directCableSession
                     if self.role == .client {
-                        self.send(.pairRequest, code: self.pairingCode)
-                        self.status = "Approve code \(self.pairingCode) on the Mac"
+                        if self.directCableSession {
+                            self.send(.sessionRequest)
+                            self.status = "Connecting to Mac over cable…"
+                        } else {
+                            self.send(.pairRequest, code: self.pairingCode)
+                            self.status = "Approve code \(self.pairingCode) on the Mac"
+                        }
                     }
                     self.receive(peer)
                 case .failed(let error), .waiting(let error):
-                    self.disconnect(reason: "Cannot connect: \(error.localizedDescription). Check the Mac Wi-Fi address and copy fresh pairing details; both devices must be on the same network.")
+                    let help = self.directCableSession ? "Check the USB cable and start connections on the Mac." : "Check the selected connection, Mac address and current pairing key."
+                    self.disconnect(reason: "Cannot connect: \(error.localizedDescription). \(help)")
                 case .cancelled: self.disconnect()
                 default: break
                 }
@@ -225,7 +433,7 @@ final class ConnectionModel: ObservableObject {
     private func handle(_ message: WireMessage) throws {
         guard message.sequence > received, message.timestampMilliseconds >= receivedTimestamp else { throw WireError.invalidMessage }
         if role == .server, session.isEmpty {
-            guard message.type == .pairRequest else { throw WireError.invalidMessage }
+            guard message.type == (directCableSession ? .sessionRequest : .pairRequest) else { throw WireError.invalidMessage }
             session = message.session
         }
         guard message.session == session else { throw WireError.invalidMessage }
@@ -237,24 +445,33 @@ final class ConnectionModel: ObservableObject {
         minimumTransitOffset = min(minimumTransitOffset ?? offset, offset)
         if offset - (minimumTransitOffset ?? offset) <= 0.25 { lastReceived = now }
         switch message.type {
-        case .pairRequest:
-            guard role == .server, !connected, !awaitingApproval else { throw WireError.invalidMessage }
-            pairingCode = message.code!
+        case .pairRequest, .sessionRequest:
+            guard (message.type == .sessionRequest) == directCableSession,
+                  role == .server, !connected, !awaitingApproval else { throw WireError.invalidMessage }
+            pairingCode = message.code ?? ""
             peerCapabilities = Set(message.capabilities!)
             guard !peerCapabilities.isDisjoint(with: localCapabilities) else {
                 send(.pairReject, closeAfter: "Client has no supported input capabilities")
                 return
             }
-            awaitingApproval = true
-            status = "Compare code \(pairingCode) with your iPad"
-        case .pairAccept:
-            guard role == .client, !connected else { throw WireError.invalidMessage }
+            if directCableSession {
+                peerCapabilities.formIntersection(localCapabilities)
+                connected = true
+                send(.sessionAccept)
+                status = "Connected to client · Wired"
+            } else {
+                awaitingApproval = true
+                status = "Compare code \(pairingCode) with your iPad"
+            }
+        case .pairAccept, .sessionAccept:
+            guard (message.type == .sessionAccept) == directCableSession,
+                  role == .client, !connected else { throw WireError.invalidMessage }
             connected = true
             peerCapabilities = Set(message.capabilities!).intersection(localCapabilities)
             guard !peerCapabilities.isEmpty else { throw WireError.invalidMessage }
             macPreferences = peerCapabilities.contains("settings.trackpadPreferences") ? message.trackpadPreferences : nil
             appContext = peerCapabilities.contains("action.appControls.v2") ? message.appContext : nil
-            status = "Connected securely to Mac"
+            status = directCableSession ? "Connected to Mac · Wired" : "Connected securely to Mac · \(activeTransport.title)"
         case .pairReject:
             guard role == .client, !connected else { throw WireError.invalidMessage }
             disconnect(reason: "Mac declined the connection")
@@ -265,14 +482,14 @@ final class ConnectionModel: ObservableObject {
                 appContext = context
             }
         case .pointerMove:
-            guard role == .server, connected, authenticated, peerCapabilities.contains("pointer.move"), let delta = message.delta else {
+            guard role == .server, connected, sessionAuthorized, peerCapabilities.contains("pointer.move"), let delta = message.delta else {
                 throw WireError.invalidMessage
             }
             // Estimate excess transit delay without assuming synchronized clocks.
             guard offset - (minimumTransitOffset ?? offset) <= 0.25 else { return }
             onPointerMove?(delta)
         case .input:
-            guard role == .server, connected, authenticated, let command = message.input,
+            guard role == .server, connected, sessionAuthorized, let command = message.input,
                   peerCapabilities.contains(command.kind.capability) else {
                 throw WireError.invalidMessage
             }
@@ -295,7 +512,7 @@ final class ConnectionModel: ObservableObject {
         connected = true
         lastReceived = ProcessInfo.processInfo.systemUptime
         send(.pairAccept)
-        status = "Connected securely to iPad"
+        status = "Connected securely to client · \(activeTransport.title)"
     }
 
     func reject() {
@@ -305,14 +522,14 @@ final class ConnectionModel: ObservableObject {
     }
 
     func refreshAppContext() {
-        guard role == .server, connected, authenticated, peerCapabilities.contains("action.appControls.v2") else { return }
+        guard role == .server, connected, sessionAuthorized, peerCapabilities.contains("action.appControls.v2") else { return }
         send(.heartbeat)
     }
 
     func sendPointer(_ delta: PointerDelta) { sendInput(.move(delta)) }
 
     func sendInput(_ command: InputCommand) {
-        guard role == .client, connected, authenticated, command.valid, peerCapabilities.contains(command.kind.capability) else { return }
+        guard role == .client, connected, sessionAuthorized, command.valid, peerCapabilities.contains(command.kind.capability) else { return }
         var compatible = command
         if command.kind == .scroll, !peerCapabilities.contains("scroll.pixel.highRange"), let delta = command.delta {
             compatible.delta = PointerDelta(dx: max(-128, min(128, delta.dx)), dy: max(-128, min(128, delta.dy)))
@@ -325,7 +542,7 @@ final class ConnectionModel: ObservableObject {
     }
 
     private func flushInput() {
-        guard !inputInFlight, connected, authenticated,
+        guard !inputInFlight, connected, sessionAuthorized,
               var command = inputQueue.pop(at: ProcessInfo.processInfo.systemUptime) else { return }
         if command.kind == .scroll, !peerCapabilities.contains("scroll.pixel.highRange"), let delta = command.delta {
             command.delta = PointerDelta(dx: max(-128, min(128, delta.dx)), dy: max(-128, min(128, delta.dy)))
@@ -341,12 +558,12 @@ final class ConnectionModel: ObservableObject {
             timestampMilliseconds: UInt64(ProcessInfo.processInfo.systemUptime * 1000), type: type, code: code)
         message.delta = delta
         message.input = input
-        if type == .pairRequest { message.capabilities = localCapabilities }
-        if type == .pairAccept {
+        if type == .pairRequest || type == .sessionRequest { message.capabilities = localCapabilities }
+        if type == .pairAccept || type == .sessionAccept {
             message.capabilities = localCapabilities.filter { peerCapabilities.contains($0) }
             if peerCapabilities.contains("settings.trackpadPreferences") { message.trackpadPreferences = preferenceSnapshot?() }
         }
-        if role == .server, (type == .pairAccept || type == .heartbeat), peerCapabilities.contains("action.appControls.v2") {
+        if role == .server, (type == .pairAccept || type == .sessionAccept || type == .heartbeat), peerCapabilities.contains("action.appControls.v2") {
             message.appContext = appContextSnapshot?()
         }
         totalSent += 1
@@ -357,7 +574,7 @@ final class ConnectionModel: ObservableObject {
                     guard let self, let peer, self.connection === peer else { return }
                     if error != nil || closeAfter != nil {
                         self.disconnect(reason: error.map { "Send failed: \($0.localizedDescription)" } ?? closeAfter)
-                    } else if type == .input {
+                    } else if type == .input, self.activeTransport != .bluetooth {
                         self.inputInFlight = false
                         self.flushInput()
                     }
@@ -382,6 +599,14 @@ final class ConnectionModel: ObservableObject {
         connection = nil
         updateNetworkActivity()
         old?.cancel()
+        bluetooth.closeSession()
+        boardListener?.cancel(); boardListener = nil
+        directCableSession = false
+        currentCableInterfaceName = nil
+        #if os(macOS)
+        boardUSB.stop()
+        #endif
+        routeDescription = "No route"
         connected = false
         authenticated = false
         active = false

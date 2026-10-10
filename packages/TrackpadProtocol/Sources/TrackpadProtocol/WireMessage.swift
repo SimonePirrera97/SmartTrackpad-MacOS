@@ -1,7 +1,7 @@
 import Foundation
 
 enum MessageKind: String, Codable, Sendable {
-    case pairRequest, pairAccept, pairReject, heartbeat, disconnect, pointerMove, input
+    case pairRequest, pairAccept, pairReject, sessionRequest, sessionAccept, heartbeat, disconnect, pointerMove, input
 }
 
 struct PointerDelta: Codable, Sendable, Equatable {
@@ -27,10 +27,10 @@ struct WireMessage: Codable, Sendable {
 
     func validate() throws {
         if let appContext {
-            guard (type == .pairAccept || type == .heartbeat), appContext.valid else { throw WireError.invalidMessage }
+            guard (type == .pairAccept || type == .sessionAccept || type == .heartbeat), appContext.valid else { throw WireError.invalidMessage }
         }
         if let trackpadPreferences {
-            guard type == .pairAccept, trackpadPreferences.valid,
+            guard (type == .pairAccept || type == .sessionAccept), trackpadPreferences.valid,
                   capabilities?.contains("settings.trackpadPreferences") == true else { throw WireError.invalidMessage }
         }
         guard version == Self.currentVersion, UUID(uuidString: session) != nil, sequence > 0 else {
@@ -52,7 +52,7 @@ struct WireMessage: Codable, Sendable {
                 throw WireError.invalidMessage
             }
         } else if input != nil { throw WireError.invalidMessage }
-        if type == .pairRequest || type == .pairAccept {
+        if type == .pairRequest || type == .pairAccept || type == .sessionRequest || type == .sessionAccept {
             guard let capabilities, !capabilities.isEmpty, capabilities.count <= 16,
                   Set(capabilities).count == capabilities.count,
                   capabilities.allSatisfy({ !$0.isEmpty && $0.utf8.count <= 64 && $0.allSatisfy(\.isASCII) }) else {

@@ -74,8 +74,10 @@ struct CompanionPanel: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 Label("Smart Trackpad", systemImage: "computermouse").font(.title2.bold())
-                Label(connection.status, systemImage: connection.connected ? "lock.shield.fill" : "wifi")
+                Label(connection.status, systemImage: connection.directCableSession ? "cable.connector" : (connection.connected ? "lock.shield.fill" : "wifi"))
                     .textSelection(.enabled)
+                BoardUSBControls(connection: connection, usb: connection.boardUSB)
+                BluetoothPairingControls(connection: connection, bluetooth: connection.bluetooth)
                 permissionSection
                 if !connection.connected { pairingSection }
                 if connection.awaitingApproval { approvalSection }
@@ -100,8 +102,8 @@ struct CompanionPanel: View {
                         }
                         Button("Release all input") { pointer.releaseAll(); nativePinch.cancel(); navigation.cancel() }
                         if connection.listening {
-                            Button("Stop pairing") { connection.stopListening() }
-                            Text("Stopping pairing disconnects the iPad. Starting again creates a new key.")
+                            Button("Stop connections") { connection.stopListening() }
+                            Text("Stopping connections disconnects the iPad. Starting again creates a new wireless pairing key.")
                                 .font(.footnote).foregroundStyle(.secondary)
                         }
                     }.padding(.top, 12)
@@ -153,11 +155,11 @@ struct CompanionPanel: View {
         GroupBox("Connect your iPad") {
             VStack(alignment: .leading, spacing: 14) {
                 if !connection.listening {
-                    Text("Start pairing, then open Smart Trackpad on your iPad. Keep both devices on the same Wi-Fi.")
-                    Button("Start pairing") { connection.startListening() }
+                    Text("Start connections, then choose Wired, Wi-Fi or Bluetooth LE on the iPad. Wired needs no pairing.")
+                    Button("Start connections") { connection.startListening() }
                         .buttonStyle(.borderedProminent)
                 } else if !connection.awaitingApproval {
-                    Text("On the iPad, select this Mac under Nearby Macs and paste the key. No address is needed.")
+                    Text("For Wired, select this Mac and connect without a key. For Wi-Fi or Bluetooth LE, select the Mac and paste this key.")
                     Button("Copy pairing key") { copy(connection.pairingKey) }
                         .buttonStyle(.borderedProminent)
                     Text("Then tap Connect on the iPad and approve the matching code here.")
@@ -165,7 +167,7 @@ struct CompanionPanel: View {
                     Divider()
                     Toggle("Show QR code instead", isOn: $pairingDisplay.showCode)
                     if pairingDisplay.showCode {
-                        Picker("Mac Wi-Fi address", selection: $pairingDisplay.host) {
+                        Picker("Mac network address", selection: $pairingDisplay.host) {
                             ForEach(LocalAddresses.ipv4, id: \.self) { Text($0).tag($0) }
                         }
                         if let payload = invitation { PairingQRCode(payload: payload) }
@@ -173,7 +175,7 @@ struct CompanionPanel: View {
                     }
                     DisclosureGroup("Manual pairing alternatives") {
                         VStack(alignment: .leading, spacing: 12) {
-                            Picker("Mac Wi-Fi address", selection: $pairingDisplay.host) {
+                            Picker("Mac network address", selection: $pairingDisplay.host) {
                                 ForEach(LocalAddresses.ipv4, id: \.self) { Text($0).tag($0) }
                             }
                             if let payload = invitation {
@@ -236,5 +238,59 @@ struct CompanionPanel: View {
                 }
             }.frame(maxWidth: .infinity, alignment: .leading).padding(8)
         }
+    }
+}
+
+
+private struct BluetoothPairingControls: View {
+    @ObservedObject var connection: ConnectionModel
+    @ObservedObject var bluetooth: BluetoothTransport
+    var body: some View {
+        GroupBox("Connection options") {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Wired connects directly over the iPad USB cable without pairing. Wi-Fi and Bluetooth LE use a pairing key and approval code.")
+                    .font(.subheadline).foregroundStyle(.secondary)
+                Text(connection.cableStatus).font(.subheadline).foregroundStyle(.secondary)
+                Toggle("Allow Bluetooth LE pairing", isOn: Binding(
+                    get: { bluetooth.enabled },
+                    set: { enabled in
+                        if enabled { connection.enableBluetooth() }
+                        else {
+                            if connection.activeTransport == .bluetooth && connection.active { connection.disconnect() }
+                            bluetooth.stop()
+                        }
+                    }))
+                Text(bluetooth.status).font(.footnote).foregroundStyle(.secondary)
+            }.frame(maxWidth: .infinity, alignment: .leading).padding(8)
+        }
+    }
+}
+
+
+private struct BoardUSBControls: View {
+    @ObservedObject var connection: ConnectionModel
+    @ObservedObject var usb: USBSerialTransport
+    @State private var selectedPort = ""
+    var body: some View {
+        DisclosureGroup("Dedicated board USB") {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("For board firmware implementing the direct session protocol. No key or approval code is required. The iPad USB cable connects from the Wired tab instead.")
+                    .font(.footnote).foregroundStyle(.secondary)
+                Picker("Board port", selection: $selectedPort) {
+                    Text("Choose a port").tag("")
+                    ForEach(usb.ports, id: \.self) { Text($0).tag($0) }
+                }.disabled(usb.opened || connection.active)
+                HStack {
+                    Button("Refresh ports") { usb.refresh() }
+                    Button(usb.opened ? "Close board USB" : "Open board USB") {
+                        if usb.opened {
+                            if connection.activeTransport == .wired { connection.disconnect() }
+                            usb.stop()
+                        } else { connection.openBoardUSB(path: selectedPort) }
+                    }.disabled(!usb.opened && (selectedPort.isEmpty || connection.active))
+                }
+                Text(usb.status).font(.footnote).foregroundStyle(.secondary)
+            }.padding(.top, 12)
+        }.onAppear { usb.refresh() }
     }
 }

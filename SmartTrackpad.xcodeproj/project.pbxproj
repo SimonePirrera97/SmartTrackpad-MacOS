@@ -1,0 +1,713 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		094A99C4EED95F21805122AC /* QuartzPointerBackend.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDAABAE07CBC516865AA7392 /* QuartzPointerBackend.swift */; };
+		0976814FC7FF945146A9C49D /* ConnectionTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = C89BF684408EA0F1AFA10290 /* ConnectionTransport.swift */; };
+		0B334BE974C60F36AC13C159 /* PairingSecret.swift in Sources */ = {isa = PBXBuildFile; fileRef = 462123C0FFFF90C2986143DF /* PairingSecret.swift */; };
+		0CD9CB0E709BFC420E562B85 /* ScrollVelocity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 076E4FC91BFE410D15EE702E /* ScrollVelocity.swift */; };
+		146A660A92258C79D938384D /* TrackpadGestureEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92263F68CBE4DDA2CAF26854 /* TrackpadGestureEngine.swift */; };
+		1800DF5C1528B8BE14BD160D /* ScrollVelocity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 076E4FC91BFE410D15EE702E /* ScrollVelocity.swift */; };
+		19FD384C42C4BC2A6DC954D4 /* PairingEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27A44565943427AB88F51835 /* PairingEntry.swift */; };
+		1CF501A1EF0CC7FC0EB09DB5 /* USBSerialTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F64CA16E1FBD25088E34FDB /* USBSerialTransport.swift */; };
+		226AA02737A04FFD50D3CC6A /* StreamByteRelay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D8170E3E4801093AC9A299E /* StreamByteRelay.swift */; };
+		22E2EAF9AD9B8CE25C8BEDA0 /* InputState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 749BA526AA38F32AE0AF2651 /* InputState.swift */; };
+		24874496012AB437DD467D7F /* NavigationGesture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84F08B603854FB3549A9E00B /* NavigationGesture.swift */; };
+		2879775DB8F7DE2AF83E959C /* HelloView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3AE9135258EDD5732D7CE088 /* HelloView.swift */; };
+		2AF2CFA8322AB2A6D8FE7530 /* WireMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3BE6B3DDC813DA7508121275 /* WireMessage.swift */; };
+		335AE2659B85BF1B0953325D /* MacTrackpadCompanionApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 583A03272AAAD7DAB22BC326 /* MacTrackpadCompanionApp.swift */; };
+		399C3F3518E317F9114570BD /* LocalAddresses.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6093CD82F5627FE46640E4F4 /* LocalAddresses.swift */; };
+		39BC00E5A8A4AA1DEE626ED7 /* PairingSecretGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89BD2791CF6DEA47B23BC415 /* PairingSecretGenerator.swift */; };
+		3A36A664E1D9D504E9D5C5FA /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 492CC68B6603950A0D0AAE55 /* Assets.xcassets */; };
+		3D0923F607686D38F4DC223E /* EditingActionStrip.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E2734EE1962C254A0258268 /* EditingActionStrip.swift */; };
+		452E1F8B4734AE553F6A8980 /* SecureTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91F438B8C9A2EC6FA8E45ADF /* SecureTransport.swift */; };
+		457B6A4DC3D058EAD31A6C39 /* InputQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84499F035BF2F80A895E374C /* InputQueue.swift */; };
+		45D2FC227B52D46B57F65836 /* WireMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3BE6B3DDC813DA7508121275 /* WireMessage.swift */; };
+		490E960DAE460CEAC2832529 /* PairingInvitation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 910FBE8D0C1AD4957FA8079D /* PairingInvitation.swift */; };
+		4D8C91FAECA8C41B9FA58102 /* InputQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84499F035BF2F80A895E374C /* InputQueue.swift */; };
+		4E0698B61DB91EF10BFB70A5 /* InputState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 749BA526AA38F32AE0AF2651 /* InputState.swift */; };
+		4F3F09B469946C4FA901DD6C /* AppControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAF5963920D7299595F0BD59 /* AppControls.swift */; };
+		504796893C7CC94436979ABC /* ScrollMomentum.swift in Sources */ = {isa = PBXBuildFile; fileRef = 247A8173A0A3F4FD599578D2 /* ScrollMomentum.swift */; };
+		51898FCBA928CE615BCF69EE /* PairingSecretGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89BD2791CF6DEA47B23BC415 /* PairingSecretGenerator.swift */; };
+		51BCD5CD99A9936C39D46CF5 /* ConnectionModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D15E062B451D598C603F09C6 /* ConnectionModel.swift */; };
+		5A2199F49FB2F4F7815C947B /* NativeGestureWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47356B384D39DCA385F64551 /* NativeGestureWindow.swift */; };
+		6181B7725988C1AC341A4F3E /* PointerMotion.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBC4A46768501924EEFF8F33 /* PointerMotion.swift */; };
+		61F9ECA241157DB644B6AF5F /* BluetoothTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65C4B149CC4D76642E0216E4 /* BluetoothTransport.swift */; };
+		660F7838DFF749360C238FAE /* NativePinchBackend.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30E9A8607E935061240D3834 /* NativePinchBackend.swift */; };
+		6BD54398C4E087F84F2E992E /* TransportAvailability.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FEFB7B47F131927E461F92C /* TransportAvailability.swift */; };
+		6FAF9A7F87CC422EE03003D6 /* NativeNavigationBackend.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13E56584A199C6D53EAB99BB /* NativeNavigationBackend.swift */; };
+		70B98B0E3683E79B67570EFE /* iPadTrackpadApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BE0CDC849874F0F3363DF56 /* iPadTrackpadApp.swift */; };
+		71763F53FCF64DA802778EF1 /* MacAppControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CD9BB6A5D1844AA4DE8B3C8 /* MacAppControls.swift */; };
+		73D961AEB4C949B4046FD623 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 948D9998EBE6FE52076C7400 /* Assets.xcassets */; };
+		74E1199F1F8A99A3BFC5EB9D /* SecureTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91F438B8C9A2EC6FA8E45ADF /* SecureTransport.swift */; };
+		78969E13B4E0047137FC5984 /* DirectCableNetwork.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91ABFBF378868A18A541B72C /* DirectCableNetwork.swift */; };
+		7FADE7D64BF95F9CF81356EF /* InputCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3ECB78277B0A426A3207D15F /* InputCommand.swift */; };
+		8095E21A025FC6DDDA71B187 /* BluetoothTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65C4B149CC4D76642E0216E4 /* BluetoothTransport.swift */; };
+		8173C2B57F99095740DBBC64 /* PointerMotion.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBC4A46768501924EEFF8F33 /* PointerMotion.swift */; };
+		82F18B1E248A08C1F0C72E19 /* LICENSE in Resources */ = {isa = PBXBuildFile; fileRef = 3EAA3419FCB8E29C3766107C /* LICENSE */; };
+		85AFA7530BFA118C47BF6D88 /* NativeNavigationEvents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3458A53A02D7068FEC2B5430 /* NativeNavigationEvents.swift */; };
+		86812B1DD7E722A08ED295C7 /* ScrollMomentum.swift in Sources */ = {isa = PBXBuildFile; fileRef = 247A8173A0A3F4FD599578D2 /* ScrollMomentum.swift */; };
+		89E45A8DE5496E2EBC651213 /* PinchMotion.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8265ACF39ECACAC6BD9EF6B3 /* PinchMotion.swift */; };
+		8BBC7E4E4AC571E9D7A8F288 /* PointerGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7511045C6FC741AF55A06E2D /* PointerGeometry.swift */; };
+		8D9D833124E10E50983ED865 /* TrackpadSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = C14B18737F358BC289920D88 /* TrackpadSurface.swift */; };
+		912C520313E785AF1D7FF61C /* DesktopAction.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77A2EFE4C00C36DB853B0C62 /* DesktopAction.swift */; };
+		922751FE0E26A67749FBDB07 /* ConnectionTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = C89BF684408EA0F1AFA10290 /* ConnectionTransport.swift */; };
+		987DC146E93AFDE800CB807F /* MacActionBackend.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72E02899ECFEDE9C94615536 /* MacActionBackend.swift */; };
+		9A283EFF6EFF985B98293DAE /* StreamByteRelay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D8170E3E4801093AC9A299E /* StreamByteRelay.swift */; };
+		A8D13AF1FA2C98046D057AEC /* NavigationGesture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84F08B603854FB3549A9E00B /* NavigationGesture.swift */; };
+		AB0C5019A3F01F1509155330 /* PairingEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27A44565943427AB88F51835 /* PairingEntry.swift */; };
+		AD2B5F851EAE7EE515661240 /* TrackpadPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BAFB0860F096EFE8BDEF90D /* TrackpadPreferences.swift */; };
+		B345F20BDC46692FC8870C32 /* USBSerialTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F64CA16E1FBD25088E34FDB /* USBSerialTransport.swift */; };
+		B5F4A5BD4EBED297B0585E8E /* PinchMotion.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8265ACF39ECACAC6BD9EF6B3 /* PinchMotion.swift */; };
+		B7CA2D40A473C18172E640A9 /* NativeMagnifyEvents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 525D3A3FED3AC44A88A84097 /* NativeMagnifyEvents.swift */; };
+		BBCD8F74D4B2852661132F2F /* AppControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAF5963920D7299595F0BD59 /* AppControls.swift */; };
+		BE1DC70FFEA7064597AEE18A /* DirectCableNetwork.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91ABFBF378868A18A541B72C /* DirectCableNetwork.swift */; };
+		BF3BBED1EB78D00AAB2FBC9B /* CompanionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BFF25AD5527861C1A06A364 /* CompanionService.swift */; };
+		BFB6B37AB5F0D696933C14C6 /* TrackpadGestureEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92263F68CBE4DDA2CAF26854 /* TrackpadGestureEngine.swift */; };
+		C116C40CA1C29CA0E37E9640 /* LICENSE in Resources */ = {isa = PBXBuildFile; fileRef = 3EAA3419FCB8E29C3766107C /* LICENSE */; };
+		C74F6EBF7E0BCB35143FD020 /* StandardActionEvents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 857C3ECFCCFA5C79CA7DA337 /* StandardActionEvents.swift */; };
+		CB184B59499A9875D743F75F /* TrackpadSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F5ADA52B98E7A3203DB2331 /* TrackpadSettings.swift */; };
+		CD1F90F86D1B31FAA8F309F3 /* ConnectionModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D15E062B451D598C603F09C6 /* ConnectionModel.swift */; };
+		D4A376683D359F1189BF8817 /* InputCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3ECB78277B0A426A3207D15F /* InputCommand.swift */; };
+		D790836BCAF518A782FDB9E3 /* TrackpadPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BAFB0860F096EFE8BDEF90D /* TrackpadPreferences.swift */; };
+		E01FFE7C7500757EF65219E4 /* MacDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69BF929C445D362A63C9BF00 /* MacDiscovery.swift */; };
+		E06CA1D22E03EF65235C831C /* PairingScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3432D30F7D7B5B4EDD9ED722 /* PairingScanner.swift */; };
+		E0D4953D123C605B3902384A /* PairingQRCode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 285C90F4D6B634198D58495E /* PairingQRCode.swift */; };
+		E3072BFECD1215EA7A95EB4B /* MacTrackpadPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39D8B2F28BA3237041871338 /* MacTrackpadPreferences.swift */; };
+		E327FEC70C00E976CF18829F /* MotionScaling.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DCF9E810F71EC3892F1822F /* MotionScaling.swift */; };
+		E53EAE9E7001782084FCC860 /* TrackpadSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D25CD68750C6844B7061BF4 /* TrackpadSettingsView.swift */; };
+		F8574AA48A0F84CE4EED436C /* MotionScaling.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DCF9E810F71EC3892F1822F /* MotionScaling.swift */; };
+		FA505D08426E55F3D6F8DF9C /* PairingInvitation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 910FBE8D0C1AD4957FA8079D /* PairingInvitation.swift */; };
+		FCCDD9C2ADF11FE11DDF14C5 /* PairingSecret.swift in Sources */ = {isa = PBXBuildFile; fileRef = 462123C0FFFF90C2986143DF /* PairingSecret.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		076E4FC91BFE410D15EE702E /* ScrollVelocity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScrollVelocity.swift; sourceTree = "<group>"; };
+		13E56584A199C6D53EAB99BB /* NativeNavigationBackend.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeNavigationBackend.swift; sourceTree = "<group>"; };
+		16E29E44468D6F2D938D82FD /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		17B4609E2EE6836337B2F5FF /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		1CD9BB6A5D1844AA4DE8B3C8 /* MacAppControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacAppControls.swift; sourceTree = "<group>"; };
+		247A8173A0A3F4FD599578D2 /* ScrollMomentum.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScrollMomentum.swift; sourceTree = "<group>"; };
+		27A44565943427AB88F51835 /* PairingEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingEntry.swift; sourceTree = "<group>"; };
+		285C90F4D6B634198D58495E /* PairingQRCode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingQRCode.swift; sourceTree = "<group>"; };
+		2BAFB0860F096EFE8BDEF90D /* TrackpadPreferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackpadPreferences.swift; sourceTree = "<group>"; };
+		30E9A8607E935061240D3834 /* NativePinchBackend.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativePinchBackend.swift; sourceTree = "<group>"; };
+		3432D30F7D7B5B4EDD9ED722 /* PairingScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingScanner.swift; sourceTree = "<group>"; };
+		3458A53A02D7068FEC2B5430 /* NativeNavigationEvents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeNavigationEvents.swift; sourceTree = "<group>"; };
+		39D8B2F28BA3237041871338 /* MacTrackpadPreferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacTrackpadPreferences.swift; sourceTree = "<group>"; };
+		3AE9135258EDD5732D7CE088 /* HelloView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HelloView.swift; sourceTree = "<group>"; };
+		3BE6B3DDC813DA7508121275 /* WireMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WireMessage.swift; sourceTree = "<group>"; };
+		3EAA3419FCB8E29C3766107C /* LICENSE */ = {isa = PBXFileReference; path = LICENSE; sourceTree = "<group>"; };
+		3ECB78277B0A426A3207D15F /* InputCommand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputCommand.swift; sourceTree = "<group>"; };
+		462123C0FFFF90C2986143DF /* PairingSecret.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingSecret.swift; sourceTree = "<group>"; };
+		47356B384D39DCA385F64551 /* NativeGestureWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeGestureWindow.swift; sourceTree = "<group>"; };
+		492CC68B6603950A0D0AAE55 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		4BFF25AD5527861C1A06A364 /* CompanionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionService.swift; sourceTree = "<group>"; };
+		4D8170E3E4801093AC9A299E /* StreamByteRelay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamByteRelay.swift; sourceTree = "<group>"; };
+		525D3A3FED3AC44A88A84097 /* NativeMagnifyEvents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeMagnifyEvents.swift; sourceTree = "<group>"; };
+		583A03272AAAD7DAB22BC326 /* MacTrackpadCompanionApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacTrackpadCompanionApp.swift; sourceTree = "<group>"; };
+		6093CD82F5627FE46640E4F4 /* LocalAddresses.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalAddresses.swift; sourceTree = "<group>"; };
+		65C4B149CC4D76642E0216E4 /* BluetoothTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BluetoothTransport.swift; sourceTree = "<group>"; };
+		69BF929C445D362A63C9BF00 /* MacDiscovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacDiscovery.swift; sourceTree = "<group>"; };
+		6A9EA0DC43065809E4BD3BF8 /* MacTrackpadCompanion.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MacTrackpadCompanion.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		6E2734EE1962C254A0258268 /* EditingActionStrip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditingActionStrip.swift; sourceTree = "<group>"; };
+		716AE0A8F9176871BBC817AC /* iPadTrackpad.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = iPadTrackpad.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		72E02899ECFEDE9C94615536 /* MacActionBackend.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacActionBackend.swift; sourceTree = "<group>"; };
+		749BA526AA38F32AE0AF2651 /* InputState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputState.swift; sourceTree = "<group>"; };
+		7511045C6FC741AF55A06E2D /* PointerGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PointerGeometry.swift; sourceTree = "<group>"; };
+		77A2EFE4C00C36DB853B0C62 /* DesktopAction.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesktopAction.swift; sourceTree = "<group>"; };
+		7BE0CDC849874F0F3363DF56 /* iPadTrackpadApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iPadTrackpadApp.swift; sourceTree = "<group>"; };
+		7D25CD68750C6844B7061BF4 /* TrackpadSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackpadSettingsView.swift; sourceTree = "<group>"; };
+		7F5ADA52B98E7A3203DB2331 /* TrackpadSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackpadSettings.swift; sourceTree = "<group>"; };
+		7F64CA16E1FBD25088E34FDB /* USBSerialTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = USBSerialTransport.swift; sourceTree = "<group>"; };
+		8265ACF39ECACAC6BD9EF6B3 /* PinchMotion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PinchMotion.swift; sourceTree = "<group>"; };
+		84499F035BF2F80A895E374C /* InputQueue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputQueue.swift; sourceTree = "<group>"; };
+		84F08B603854FB3549A9E00B /* NavigationGesture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavigationGesture.swift; sourceTree = "<group>"; };
+		857C3ECFCCFA5C79CA7DA337 /* StandardActionEvents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StandardActionEvents.swift; sourceTree = "<group>"; };
+		89BD2791CF6DEA47B23BC415 /* PairingSecretGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingSecretGenerator.swift; sourceTree = "<group>"; };
+		8FEFB7B47F131927E461F92C /* TransportAvailability.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransportAvailability.swift; sourceTree = "<group>"; };
+		910FBE8D0C1AD4957FA8079D /* PairingInvitation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingInvitation.swift; sourceTree = "<group>"; };
+		91ABFBF378868A18A541B72C /* DirectCableNetwork.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DirectCableNetwork.swift; sourceTree = "<group>"; };
+		91F438B8C9A2EC6FA8E45ADF /* SecureTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecureTransport.swift; sourceTree = "<group>"; };
+		92263F68CBE4DDA2CAF26854 /* TrackpadGestureEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackpadGestureEngine.swift; sourceTree = "<group>"; };
+		948D9998EBE6FE52076C7400 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		9DCF9E810F71EC3892F1822F /* MotionScaling.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MotionScaling.swift; sourceTree = "<group>"; };
+		C14B18737F358BC289920D88 /* TrackpadSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackpadSurface.swift; sourceTree = "<group>"; };
+		C89BF684408EA0F1AFA10290 /* ConnectionTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionTransport.swift; sourceTree = "<group>"; };
+		D15E062B451D598C603F09C6 /* ConnectionModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionModel.swift; sourceTree = "<group>"; };
+		FAF5963920D7299595F0BD59 /* AppControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppControls.swift; sourceTree = "<group>"; };
+		FBC4A46768501924EEFF8F33 /* PointerMotion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PointerMotion.swift; sourceTree = "<group>"; };
+		FDAABAE07CBC516865AA7392 /* QuartzPointerBackend.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuartzPointerBackend.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		3075771B1E7D3AC6B8BBEA4D /* TrackpadProtocol */ = {
+			isa = PBXGroup;
+			children = (
+				FAF5963920D7299595F0BD59 /* AppControls.swift */,
+				3ECB78277B0A426A3207D15F /* InputCommand.swift */,
+				84499F035BF2F80A895E374C /* InputQueue.swift */,
+				27A44565943427AB88F51835 /* PairingEntry.swift */,
+				910FBE8D0C1AD4957FA8079D /* PairingInvitation.swift */,
+				462123C0FFFF90C2986143DF /* PairingSecret.swift */,
+				2BAFB0860F096EFE8BDEF90D /* TrackpadPreferences.swift */,
+				3BE6B3DDC813DA7508121275 /* WireMessage.swift */,
+			);
+			name = TrackpadProtocol;
+			path = packages/TrackpadProtocol/Sources/TrackpadProtocol;
+			sourceTree = "<group>";
+		};
+		35A83635F1E9201E50412ACA /* iPadTrackpad */ = {
+			isa = PBXGroup;
+			children = (
+				948D9998EBE6FE52076C7400 /* Assets.xcassets */,
+				6E2734EE1962C254A0258268 /* EditingActionStrip.swift */,
+				3AE9135258EDD5732D7CE088 /* HelloView.swift */,
+				17B4609E2EE6836337B2F5FF /* Info.plist */,
+				7BE0CDC849874F0F3363DF56 /* iPadTrackpadApp.swift */,
+				69BF929C445D362A63C9BF00 /* MacDiscovery.swift */,
+				3432D30F7D7B5B4EDD9ED722 /* PairingScanner.swift */,
+				7F5ADA52B98E7A3203DB2331 /* TrackpadSettings.swift */,
+				7D25CD68750C6844B7061BF4 /* TrackpadSettingsView.swift */,
+				C14B18737F358BC289920D88 /* TrackpadSurface.swift */,
+				8FEFB7B47F131927E461F92C /* TransportAvailability.swift */,
+			);
+			name = iPadTrackpad;
+			path = apps/iPadTrackpad;
+			sourceTree = "<group>";
+		};
+		4478E19F4C77DE607C48C90A /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				716AE0A8F9176871BBC817AC /* iPadTrackpad.app */,
+				6A9EA0DC43065809E4BD3BF8 /* MacTrackpadCompanion.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		5E69B9B69C260DAFBD492393 /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				65C4B149CC4D76642E0216E4 /* BluetoothTransport.swift */,
+				D15E062B451D598C603F09C6 /* ConnectionModel.swift */,
+				C89BF684408EA0F1AFA10290 /* ConnectionTransport.swift */,
+				91ABFBF378868A18A541B72C /* DirectCableNetwork.swift */,
+				89BD2791CF6DEA47B23BC415 /* PairingSecretGenerator.swift */,
+				91F438B8C9A2EC6FA8E45ADF /* SecureTransport.swift */,
+				4D8170E3E4801093AC9A299E /* StreamByteRelay.swift */,
+				7F64CA16E1FBD25088E34FDB /* USBSerialTransport.swift */,
+			);
+			name = Shared;
+			path = apps/Shared;
+			sourceTree = "<group>";
+		};
+		673F851BD90F5BE9ABC22512 = {
+			isa = PBXGroup;
+			children = (
+				781D78D4DC49867CE6A10BF6 /* GestureCore */,
+				35A83635F1E9201E50412ACA /* iPadTrackpad */,
+				B811072FA83F8D166CD415EA /* lucide */,
+				9A2C5806C58E66446E613DCD /* MacTrackpadCompanion */,
+				5E69B9B69C260DAFBD492393 /* Shared */,
+				3075771B1E7D3AC6B8BBEA4D /* TrackpadProtocol */,
+				4478E19F4C77DE607C48C90A /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		781D78D4DC49867CE6A10BF6 /* GestureCore */ = {
+			isa = PBXGroup;
+			children = (
+				749BA526AA38F32AE0AF2651 /* InputState.swift */,
+				9DCF9E810F71EC3892F1822F /* MotionScaling.swift */,
+				84F08B603854FB3549A9E00B /* NavigationGesture.swift */,
+				8265ACF39ECACAC6BD9EF6B3 /* PinchMotion.swift */,
+				FBC4A46768501924EEFF8F33 /* PointerMotion.swift */,
+				247A8173A0A3F4FD599578D2 /* ScrollMomentum.swift */,
+				076E4FC91BFE410D15EE702E /* ScrollVelocity.swift */,
+				92263F68CBE4DDA2CAF26854 /* TrackpadGestureEngine.swift */,
+			);
+			name = GestureCore;
+			path = packages/GestureCore/Sources/GestureCore;
+			sourceTree = "<group>";
+		};
+		9A2C5806C58E66446E613DCD /* MacTrackpadCompanion */ = {
+			isa = PBXGroup;
+			children = (
+				492CC68B6603950A0D0AAE55 /* Assets.xcassets */,
+				4BFF25AD5527861C1A06A364 /* CompanionService.swift */,
+				77A2EFE4C00C36DB853B0C62 /* DesktopAction.swift */,
+				16E29E44468D6F2D938D82FD /* Info.plist */,
+				6093CD82F5627FE46640E4F4 /* LocalAddresses.swift */,
+				72E02899ECFEDE9C94615536 /* MacActionBackend.swift */,
+				1CD9BB6A5D1844AA4DE8B3C8 /* MacAppControls.swift */,
+				583A03272AAAD7DAB22BC326 /* MacTrackpadCompanionApp.swift */,
+				39D8B2F28BA3237041871338 /* MacTrackpadPreferences.swift */,
+				47356B384D39DCA385F64551 /* NativeGestureWindow.swift */,
+				525D3A3FED3AC44A88A84097 /* NativeMagnifyEvents.swift */,
+				13E56584A199C6D53EAB99BB /* NativeNavigationBackend.swift */,
+				3458A53A02D7068FEC2B5430 /* NativeNavigationEvents.swift */,
+				30E9A8607E935061240D3834 /* NativePinchBackend.swift */,
+				285C90F4D6B634198D58495E /* PairingQRCode.swift */,
+				7511045C6FC741AF55A06E2D /* PointerGeometry.swift */,
+				FDAABAE07CBC516865AA7392 /* QuartzPointerBackend.swift */,
+				857C3ECFCCFA5C79CA7DA337 /* StandardActionEvents.swift */,
+			);
+			name = MacTrackpadCompanion;
+			path = apps/MacTrackpadCompanion;
+			sourceTree = "<group>";
+		};
+		B811072FA83F8D166CD415EA /* lucide */ = {
+			isa = PBXGroup;
+			children = (
+				3EAA3419FCB8E29C3766107C /* LICENSE */,
+			);
+			name = lucide;
+			path = assets/lucide;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		3123EB019E10FB11E7157862 /* iPadTrackpad */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = BF267B4DA396619AC33BA11C /* Build configuration list for PBXNativeTarget "iPadTrackpad" */;
+			buildPhases = (
+				56C682C5D0B72A4DD9731BCE /* Sources */,
+				90DAD49CDCF6A416F4AF007E /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = iPadTrackpad;
+			packageProductDependencies = (
+			);
+			productName = iPadTrackpad;
+			productReference = 716AE0A8F9176871BBC817AC /* iPadTrackpad.app */;
+			productType = "com.apple.product-type.application";
+		};
+		EDBF385F81AF94FEF27C2A25 /* MacTrackpadCompanion */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 01A73C8DE74BE6EE67854E1A /* Build configuration list for PBXNativeTarget "MacTrackpadCompanion" */;
+			buildPhases = (
+				788C2D7A81BFD999DF5ADBF0 /* Sources */,
+				5261FF2AC032ABFF6268D9BB /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = MacTrackpadCompanion;
+			packageProductDependencies = (
+			);
+			productName = MacTrackpadCompanion;
+			productReference = 6A9EA0DC43065809E4BD3BF8 /* MacTrackpadCompanion.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		23F2B50134E0F15738D3E5D7 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					3123EB019E10FB11E7157862 = {
+						DevelopmentTeam = F3RB9G843M;
+						ProvisioningStyle = Automatic;
+					};
+					EDBF385F81AF94FEF27C2A25 = {
+						DevelopmentTeam = F3RB9G843M;
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = B8A2B382C173B78150D2037B /* Build configuration list for PBXProject "SmartTrackpad" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 673F851BD90F5BE9ABC22512;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 4478E19F4C77DE607C48C90A /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				3123EB019E10FB11E7157862 /* iPadTrackpad */,
+				EDBF385F81AF94FEF27C2A25 /* MacTrackpadCompanion */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		5261FF2AC032ABFF6268D9BB /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				3A36A664E1D9D504E9D5C5FA /* Assets.xcassets in Resources */,
+				C116C40CA1C29CA0E37E9640 /* LICENSE in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		90DAD49CDCF6A416F4AF007E /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				73D961AEB4C949B4046FD623 /* Assets.xcassets in Resources */,
+				82F18B1E248A08C1F0C72E19 /* LICENSE in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		56C682C5D0B72A4DD9731BCE /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4F3F09B469946C4FA901DD6C /* AppControls.swift in Sources */,
+				61F9ECA241157DB644B6AF5F /* BluetoothTransport.swift in Sources */,
+				51BCD5CD99A9936C39D46CF5 /* ConnectionModel.swift in Sources */,
+				922751FE0E26A67749FBDB07 /* ConnectionTransport.swift in Sources */,
+				78969E13B4E0047137FC5984 /* DirectCableNetwork.swift in Sources */,
+				3D0923F607686D38F4DC223E /* EditingActionStrip.swift in Sources */,
+				2879775DB8F7DE2AF83E959C /* HelloView.swift in Sources */,
+				7FADE7D64BF95F9CF81356EF /* InputCommand.swift in Sources */,
+				4D8C91FAECA8C41B9FA58102 /* InputQueue.swift in Sources */,
+				22E2EAF9AD9B8CE25C8BEDA0 /* InputState.swift in Sources */,
+				E01FFE7C7500757EF65219E4 /* MacDiscovery.swift in Sources */,
+				F8574AA48A0F84CE4EED436C /* MotionScaling.swift in Sources */,
+				24874496012AB437DD467D7F /* NavigationGesture.swift in Sources */,
+				AB0C5019A3F01F1509155330 /* PairingEntry.swift in Sources */,
+				FA505D08426E55F3D6F8DF9C /* PairingInvitation.swift in Sources */,
+				E06CA1D22E03EF65235C831C /* PairingScanner.swift in Sources */,
+				0B334BE974C60F36AC13C159 /* PairingSecret.swift in Sources */,
+				39BC00E5A8A4AA1DEE626ED7 /* PairingSecretGenerator.swift in Sources */,
+				89E45A8DE5496E2EBC651213 /* PinchMotion.swift in Sources */,
+				6181B7725988C1AC341A4F3E /* PointerMotion.swift in Sources */,
+				504796893C7CC94436979ABC /* ScrollMomentum.swift in Sources */,
+				1800DF5C1528B8BE14BD160D /* ScrollVelocity.swift in Sources */,
+				452E1F8B4734AE553F6A8980 /* SecureTransport.swift in Sources */,
+				9A283EFF6EFF985B98293DAE /* StreamByteRelay.swift in Sources */,
+				BFB6B37AB5F0D696933C14C6 /* TrackpadGestureEngine.swift in Sources */,
+				D790836BCAF518A782FDB9E3 /* TrackpadPreferences.swift in Sources */,
+				CB184B59499A9875D743F75F /* TrackpadSettings.swift in Sources */,
+				E53EAE9E7001782084FCC860 /* TrackpadSettingsView.swift in Sources */,
+				8D9D833124E10E50983ED865 /* TrackpadSurface.swift in Sources */,
+				6BD54398C4E087F84F2E992E /* TransportAvailability.swift in Sources */,
+				B345F20BDC46692FC8870C32 /* USBSerialTransport.swift in Sources */,
+				45D2FC227B52D46B57F65836 /* WireMessage.swift in Sources */,
+				70B98B0E3683E79B67570EFE /* iPadTrackpadApp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		788C2D7A81BFD999DF5ADBF0 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				BBCD8F74D4B2852661132F2F /* AppControls.swift in Sources */,
+				8095E21A025FC6DDDA71B187 /* BluetoothTransport.swift in Sources */,
+				BF3BBED1EB78D00AAB2FBC9B /* CompanionService.swift in Sources */,
+				CD1F90F86D1B31FAA8F309F3 /* ConnectionModel.swift in Sources */,
+				0976814FC7FF945146A9C49D /* ConnectionTransport.swift in Sources */,
+				912C520313E785AF1D7FF61C /* DesktopAction.swift in Sources */,
+				BE1DC70FFEA7064597AEE18A /* DirectCableNetwork.swift in Sources */,
+				D4A376683D359F1189BF8817 /* InputCommand.swift in Sources */,
+				457B6A4DC3D058EAD31A6C39 /* InputQueue.swift in Sources */,
+				4E0698B61DB91EF10BFB70A5 /* InputState.swift in Sources */,
+				399C3F3518E317F9114570BD /* LocalAddresses.swift in Sources */,
+				987DC146E93AFDE800CB807F /* MacActionBackend.swift in Sources */,
+				71763F53FCF64DA802778EF1 /* MacAppControls.swift in Sources */,
+				335AE2659B85BF1B0953325D /* MacTrackpadCompanionApp.swift in Sources */,
+				E3072BFECD1215EA7A95EB4B /* MacTrackpadPreferences.swift in Sources */,
+				E327FEC70C00E976CF18829F /* MotionScaling.swift in Sources */,
+				5A2199F49FB2F4F7815C947B /* NativeGestureWindow.swift in Sources */,
+				B7CA2D40A473C18172E640A9 /* NativeMagnifyEvents.swift in Sources */,
+				6FAF9A7F87CC422EE03003D6 /* NativeNavigationBackend.swift in Sources */,
+				85AFA7530BFA118C47BF6D88 /* NativeNavigationEvents.swift in Sources */,
+				660F7838DFF749360C238FAE /* NativePinchBackend.swift in Sources */,
+				A8D13AF1FA2C98046D057AEC /* NavigationGesture.swift in Sources */,
+				19FD384C42C4BC2A6DC954D4 /* PairingEntry.swift in Sources */,
+				490E960DAE460CEAC2832529 /* PairingInvitation.swift in Sources */,
+				E0D4953D123C605B3902384A /* PairingQRCode.swift in Sources */,
+				FCCDD9C2ADF11FE11DDF14C5 /* PairingSecret.swift in Sources */,
+				51898FCBA928CE615BCF69EE /* PairingSecretGenerator.swift in Sources */,
+				B5F4A5BD4EBED297B0585E8E /* PinchMotion.swift in Sources */,
+				8BBC7E4E4AC571E9D7A8F288 /* PointerGeometry.swift in Sources */,
+				8173C2B57F99095740DBBC64 /* PointerMotion.swift in Sources */,
+				094A99C4EED95F21805122AC /* QuartzPointerBackend.swift in Sources */,
+				86812B1DD7E722A08ED295C7 /* ScrollMomentum.swift in Sources */,
+				0CD9CB0E709BFC420E562B85 /* ScrollVelocity.swift in Sources */,
+				74E1199F1F8A99A3BFC5EB9D /* SecureTransport.swift in Sources */,
+				C74F6EBF7E0BCB35143FD020 /* StandardActionEvents.swift in Sources */,
+				226AA02737A04FFD50D3CC6A /* StreamByteRelay.swift in Sources */,
+				146A660A92258C79D938384D /* TrackpadGestureEngine.swift in Sources */,
+				AD2B5F851EAE7EE515661240 /* TrackpadPreferences.swift in Sources */,
+				1CF501A1EF0CC7FC0EB09DB5 /* USBSerialTransport.swift in Sources */,
+				2AF2CFA8322AB2A6D8FE7530 /* WireMessage.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		0075A82039466E5FCDF27960 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				COMBINE_HIDPI_IMAGES = YES;
+				DEVELOPMENT_TEAM = F3RB9G843M;
+				ENABLE_APP_SANDBOX = NO;
+				INFOPLIST_FILE = apps/MacTrackpadCompanion/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Smart Trackpad Companion";
+				INFOPLIST_KEY_LSUIElement = YES;
+				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "Connect your iPad and Mac directly over Bluetooth LE for Smart Trackpad.";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Discover and connect to your iPad over Wi-Fi or a direct USB cable.";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.simonepirrera.smarttrackpad.mac;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		0FEF449498D82DCDD574459D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_TEAM = F3RB9G843M;
+				INFOPLIST_FILE = apps/iPadTrackpad/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Smart Trackpad";
+				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "Connect your iPad and Mac directly over Bluetooth LE for Smart Trackpad.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Scan the pairing QR code shown by your Mac. Camera images are not saved or sent.";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Discover and connect to your Mac over Wi-Fi or a direct USB cable.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.simonepirrera.smarttrackpad.ipad;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = 2;
+			};
+			name = Debug;
+		};
+		1DF73DA9C8773ACC60B6CBF5 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_TEAM = F3RB9G843M;
+				INFOPLIST_FILE = apps/iPadTrackpad/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Smart Trackpad";
+				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "Connect your iPad and Mac directly over Bluetooth LE for Smart Trackpad.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Scan the pairing QR code shown by your Mac. Camera images are not saved or sent.";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Discover and connect to your Mac over Wi-Fi or a direct USB cable.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.simonepirrera.smarttrackpad.ipad;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = 2;
+			};
+			name = Release;
+		};
+		78340E0824549A76BCD901F7 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.1.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		B80C9AEBA918209B4BD8637A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.1.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		CF9898147B8EFF14460FE773 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				COMBINE_HIDPI_IMAGES = YES;
+				DEVELOPMENT_TEAM = F3RB9G843M;
+				ENABLE_APP_SANDBOX = NO;
+				INFOPLIST_FILE = apps/MacTrackpadCompanion/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Smart Trackpad Companion";
+				INFOPLIST_KEY_LSUIElement = YES;
+				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "Connect your iPad and Mac directly over Bluetooth LE for Smart Trackpad.";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Discover and connect to your iPad over Wi-Fi or a direct USB cable.";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.simonepirrera.smarttrackpad.mac;
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		01A73C8DE74BE6EE67854E1A /* Build configuration list for PBXNativeTarget "MacTrackpadCompanion" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				0075A82039466E5FCDF27960 /* Debug */,
+				CF9898147B8EFF14460FE773 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		B8A2B382C173B78150D2037B /* Build configuration list for PBXProject "SmartTrackpad" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				78340E0824549A76BCD901F7 /* Debug */,
+				B80C9AEBA918209B4BD8637A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		BF267B4DA396619AC33BA11C /* Build configuration list for PBXNativeTarget "iPadTrackpad" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				0FEF449498D82DCDD574459D /* Debug */,
+				1DF73DA9C8773ACC60B6CBF5 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 23F2B50134E0F15738D3E5D7 /* Project object */;
+}
