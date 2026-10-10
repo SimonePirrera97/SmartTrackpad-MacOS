@@ -69,7 +69,11 @@ struct TrackpadSettingsView: View {
                          : "Pinch to zoom is unavailable on the connected Mac.")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
-
+                Section("Help") {
+                    Link(destination: URL(string: "https://github.com/SimonePirrera97/SmartTrackpad-MacOS#readme")!) {
+                        Label("Help and documentation", systemImage: "book")
+                    }
+                }
             }
             .navigationTitle("Trackpad settings")
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }

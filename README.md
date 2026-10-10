@@ -43,6 +43,18 @@ Target configuration is in `project.yml`. The generated project is included, so 
 xcodegen generate
 ```
 
+## Next steps
+
+The functional iPad phase is complete. Next priorities:
+
+- [ ] **Connection robustness:** test home, public/guest and institutional Wi-Fi with client isolation, blocked Bonjour/multicast, firewalls, captive portals and VPNs. Test manual pairing separately from discovery; measure latency, loss, disconnect recovery and held-input cleanup. Document networks that prevent direct peer connections rather than promising universal support.
+- [ ] **Bluetooth:** prototype a paired Bluetooth transport and compare latency, reliability, throughput and battery use with Wi-Fi. Choose the transport from measurements; retain approval, authorization and safe disconnect behavior.
+- [ ] **Fast wired connection:** evaluate a supported iPad–Mac cable path and an STM–Mac USB path separately. Measure latency and jitter, assess charging/data behavior, and document hardware/platform constraints before choosing an implementation.
+- [ ] **STM client:** confirm the exact STM MCU/board, touchscreen/contact count, radio, USB capability, battery and display hardware. Reuse the Mac companion and portable gesture/protocol behavior; do not assume the earlier ESP32-S3 candidate applies to STM.
+- [ ] **Battery-first firmware:** set a measurable power budget and runtime target. Implement bounded allocation, event-driven touch handling, adaptive display refresh/backlight, radio scheduling, idle/sleep states and safe wake/reconnect. Measure current and latency in active, idle and sleep modes before optimizing the highest-cost components.
+
+Keep transport adapters separate from portable gesture and session logic. Validate security and hardware behavior for each new transport and board increment before marking it complete.
+
 ## Project layout
 
 - `apps/iPadTrackpad`: iPad interface and Apple touch adapters.
