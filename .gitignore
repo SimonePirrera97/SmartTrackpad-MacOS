@@ -2,10 +2,12 @@
 /*
 !/.gitignore
 !/README.md
+!/LICENSE
 !/project.yml
 !/apps/
 !/packages/
 !/assets/
+!/firmware/
 !/SmartTrackpad.xcodeproj/
 
 # Apple adapters, application metadata and app icons.
@@ -24,6 +26,12 @@
 /assets/**
 !/assets/lucide/
 !/assets/lucide/LICENSE
+!/assets/SmartTrackpad-LICENSE.txt
+
+# Board firmware sources; its own .gitignore excludes build output and downloads.
+/firmware/**
+!/firmware/**/
+!/firmware/waveshare-esp32s3-7inch/**
 
 # Share the generated project and schemes, not personal Xcode state.
 /SmartTrackpad.xcodeproj/**

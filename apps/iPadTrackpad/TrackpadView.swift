@@ -1,6 +1,6 @@
 import SwiftUI
 
-struct HelloView: View {
+struct TrackpadView: View {
     @StateObject private var connection = ConnectionModel(role: .client)
     @StateObject private var address = MacAddress()
     @StateObject private var settings = TrackpadSettings()
@@ -9,6 +9,8 @@ struct HelloView: View {
     @StateObject private var availability = TransportAvailability()
     @State private var transport: ConnectionTransport = .wired
     @State private var bluetoothMacID: UUID?
+    /// The user ended a cable session; wait for Connect before accepting the Mac again.
+    @State private var cablePaused = false
     @StateObject private var entry = PairingEntryModel()
     @Environment(\.scenePhase) private var scenePhase
 
@@ -16,7 +18,6 @@ struct HelloView: View {
         var options = settings.options
         options.pageSwipes = settings.pageSwipes && connection.supportsPageSwipe
         options.interactiveMissionControl = settings.threeFingerMissionControl && connection.supportsMissionControl
-        options.threeFingerMissionControl = false
         options.nativePinch = settings.pinchEnabled && connection.supportsNativePinch
         return options
     }
@@ -32,7 +33,7 @@ struct HelloView: View {
                             Label("Settings", systemImage: "slider.horizontal.3")
                         }
                         Text("|").foregroundStyle(.secondary).accessibilityHidden(true)
-                        Button("Disconnect") { connection.disconnect() }
+                        Button("Disconnect") { endSession() }
                     }
                     Label(connection.status, systemImage: connection.directCableSession ? "cable.connector" : "lock.shield")
                         .font(.subheadline).foregroundStyle(.secondary)
@@ -41,7 +42,7 @@ struct HelloView: View {
                             if command.kind == .button && command.button == .left {
                                 settings.dragging = command.pressed ?? false
                             }
-                            for scaled in settings.scaledCommands(command) { connection.sendInput(scaled) }
+                            settings.emitScaled(command) { connection.sendInput($0) }
                         } onHoldStatus: { status in
                             if settings.holdStatus != status { settings.holdStatus = status }
                         }
@@ -84,6 +85,7 @@ struct HelloView: View {
             if phase == .background {
                 discovery.stop()
                 connection.bluetooth.stop()
+                connection.stopCableListening()
                 settings.dragging = false
                 connection.disconnect(reason: "App backgrounded · reconnect when ready")
             } else if phase == .active && !connection.connected {
@@ -91,7 +93,8 @@ struct HelloView: View {
             }
         }
         .sheet(isPresented: $settings.showSettings) {
-            TrackpadSettingsView(settings: settings, nativePinchAvailable: connection.supportsNativePinch, missionControlAvailable: connection.supportsMissionControl, pagesAvailable: connection.supportsPageSwipe, macPreferences: connection.macPreferences)
+            TrackpadSettingsView(settings: settings, nativePinchAvailable: connection.supportsNativePinch, missionControlAvailable: connection.supportsMissionControl, pagesAvailable: connection.supportsPageSwipe, macPreferences: connection.macPreferences,
+                copyDiagnostics: { UIPasteboard.general.string = connection.diagnostics })
                 .onAppear { settings.releaseGeneration &+= 1; connection.sendInput(.releaseAll); settings.dragging = false }
         }
         .fullScreenCover(isPresented: $scanner.presented) {
@@ -106,6 +109,8 @@ struct HelloView: View {
         .onChange(of: connection.connected) { _, connected in
             settings.dragging = false
             UIApplication.shared.isIdleTimerDisabled = connected
+            if connected { discovery.stop() }
+            else if scenePhase == .active { startDiscovery() }
         }
     }
 
@@ -116,8 +121,17 @@ struct HelloView: View {
     }
 
     private func startDiscovery() {
-        if transport == .bluetooth { connection.enableBluetooth() }
-        else { discovery.start(transport: transport) }
+        switch transport {
+        case .wired: if !cablePaused { connection.startCableListening() }
+        case .wifi: discovery.start()
+        case .bluetooth: connection.enableBluetooth()
+        }
+    }
+
+    /// A cable session would otherwise be reopened by the Mac within a second.
+    private func endSession() {
+        if transport == .wired { cablePaused = true; connection.stopCableListening() }
+        connection.disconnect()
     }
 
     private func apply(_ invitation: PairingInvitation) {
@@ -129,7 +143,7 @@ struct HelloView: View {
 
     private var nearbyMacs: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(transport == .wired ? "Mac on USB cable" : "Nearby Macs").font(.headline)
+            Text("Nearby Macs").font(.headline)
             if discovery.macs.isEmpty {
                 Text(discovery.status).font(.subheadline).foregroundStyle(.secondary)
                 Button("Search again") { discovery.stop(); startDiscovery() }
@@ -140,10 +154,10 @@ struct HelloView: View {
                     ForEach(discovery.macs) { mac in Text(mac.name).tag(mac.id) }
                 }
                 .disabled(connection.active)
-                Text(transport == .wired ? "Select the Mac connected by USB cable. No key or approval code is needed." : "Copy the pairing key from this Mac. You do not need to type its address.")
+                Text("Copy the pairing key from this Mac. You do not need to type its address.")
                     .font(.subheadline).foregroundStyle(.secondary)
             }
-            if !entry.useEnteredAddress && transport != .wired {
+            if !entry.useEnteredAddress {
                 Text("Pairing key").font(.subheadline.bold())
                 SecureField("Paste the key copied from your Mac", text: $address.pairingKey)
                     .textFieldStyle(.roundedBorder)
@@ -161,7 +175,8 @@ struct HelloView: View {
                         .font(.system(size: 56)).foregroundStyle(.blue)
                         .accessibilityHidden(true)
                     Text("Connect to your Mac").font(.largeTitle.bold())
-                    Text("Open Smart Trackpad on your Mac and start connections. \(transport.instructions)")
+                    Text(transport == .wired ? "Open Smart Trackpad on your Mac. \(transport.instructions)"
+                         : "Open Smart Trackpad on your Mac and start connections. \(transport.instructions)")
                         .foregroundStyle(.secondary).multilineTextAlignment(.center)
                 }
                 .frame(maxWidth: .infinity)
@@ -174,23 +189,22 @@ struct HelloView: View {
                         .pickerStyle(.segmented).disabled(connection.active)
                         if transport == .bluetooth {
                             BluetoothAvailabilityView(bluetooth: connection.bluetooth)
-                        } else {
-                            Text(transport == .wifi ? availability.wifiMessage : (discovery.macs.isEmpty ? "Waiting for a Mac on the USB cable. Unlock both devices and start connections on the Mac." : "Direct USB connection available."))
-                                .font(.subheadline).foregroundStyle(.secondary)
+                        } else if transport == .wifi {
+                            Text(availability.wifiMessage).font(.subheadline).foregroundStyle(.secondary)
                         }
                         if transport == .wifi {
                             Button("Open Settings") { openSystemSettings() }
                             Text("Choose Wi-Fi in Settings to enable it or join a network. For app permissions, use this app’s Settings page.")
                                 .font(.footnote).foregroundStyle(.secondary)
                         }
-                        Text("1. Choose your Mac").font(.headline)
+                        if transport != .wired { Text("1. Choose your Mac").font(.headline) }
                         if transport == .bluetooth {
                             BluetoothMacPicker(bluetooth: connection.bluetooth, selectedID: $bluetoothMacID)
                             SecureField("Paste the key copied from your Mac", text: $address.pairingKey)
                                 .textFieldStyle(.roundedBorder)
                                 .textInputAutocapitalization(.never).autocorrectionDisabled()
                                 .disabled(connection.active)
-                        } else { nearbyMacs }
+                        } else if transport == .wifi { nearbyMacs }
                         if transport != .wired {
                             Divider()
                             Button { Task { await scanner.present() } } label: {
@@ -255,8 +269,9 @@ struct HelloView: View {
                         if transport == .wired, let error = entry.pasteError {
                             Text(error).font(.subheadline).foregroundStyle(.red)
                         }
-                        Text(transport == .wired ? "2. Connect" : "2. Connect and approve").font(.headline)
-                        Label(connection.status, systemImage: transport == .wired ? "cable.connector" : (connection.authenticated ? "lock.shield" : "wifi"))
+                        Text(transport == .wired ? "Connect" : "2. Connect and approve").font(.headline)
+                        Label(transport == .wired && connection.cableListening && !connection.active
+                              ? "Waiting for the Mac on the cable…" : connection.status, systemImage: transport == .wired ? "cable.connector" : (connection.authenticated ? "lock.shield" : "wifi"))
                             .textSelection(.enabled)
                         if !connection.pairingCode.isEmpty && connection.authenticated {
                             Text(connection.pairingCode).font(.largeTitle.monospacedDigit())
@@ -267,9 +282,8 @@ struct HelloView: View {
                             Button("Connect") {
                                 entry.pasteError = nil
                                 if transport == .wired {
-                                    if let mac = discovery.macs.first(where: { $0.id == entry.selectedMacID }) {
-                                        connection.connectCable(to: mac.endpoint)
-                                    } else { entry.pasteError = "Choose the Mac connected by cable first." }
+                                    cablePaused = false
+                                    connection.startCableListening()
                                 } else if transport == .bluetooth {
                                     if let id = bluetoothMacID { connection.connectBluetooth(id: id, key: address.pairingKey) }
                                     else { entry.pasteError = "Choose a Bluetooth Mac first." }
@@ -283,11 +297,11 @@ struct HelloView: View {
                             }
                             .buttonStyle(.borderedProminent)
                             .disabled(connection.active || (transport != .wired && address.pairingKey.isEmpty)
-                                || (transport == .wired && discovery.macs.isEmpty)
+                                || (transport == .wired && connection.cableListening)
                                 || (transport == .wifi && !availability.wifiAvailable))
                             if connection.active {
                                 ProgressView().controlSize(.small)
-                                Button("Cancel connection") { connection.disconnect() }
+                                Button("Cancel connection") { endSession() }
                             }
                         }
                     }
@@ -302,6 +316,8 @@ struct HelloView: View {
         .onChange(of: transport) { _, _ in
             discovery.stop()
             connection.bluetooth.stop()
+            connection.stopCableListening()
+            cablePaused = false
             entry.selectedMacID = ""
             bluetoothMacID = nil
             entry.pasteError = nil

@@ -91,17 +91,10 @@ struct CompanionPanel: View {
                             Text(address).font(.body.monospaced()).textSelection(.enabled)
                         }
                         Button("Copy diagnostics") {
-                            copy(connection.diagnostics + "\nAccessibility: \(pointer.permissionGranted), input enabled: \(pointer.enabled), dragging: \(pointer.dragging), momentum: \(pointer.momentumEnabled)\nAction: \(actions.status)\nPinch: available \(nativePinch.available), enabled \(nativePinch.enabled), active \(nativePinch.active); \(nativePinch.status)\n" + nativePinch.comparisonReport + "\nNavigation: \(navigation.status); enabled \(navigation.enabled), pages \(navigation.pagesAvailable), Mission Control \(navigation.missionControlAvailable), desktop \(navigation.desktopAvailable)")
-                        }
-                        Button(nativePinch.comparing ? "Stop pinch comparison" : "Compare pinch events (30 seconds)") {
-                            if nativePinch.comparing { nativePinch.stopComparison() }
-                            else { nativePinch.startComparison() }
-                        }
-                        if !nativePinch.comparisonStatus.isEmpty {
-                            Text(nativePinch.comparisonStatus).font(.footnote).foregroundStyle(.secondary)
+                            copy(connection.diagnostics + "\nAccessibility: \(pointer.permissionGranted), input enabled: \(pointer.enabled), dragging: \(pointer.dragging), momentum: \(pointer.momentumEnabled)\nAction: \(actions.status)\nPinch: available \(nativePinch.available), enabled \(nativePinch.enabled), active \(nativePinch.active); \(nativePinch.status)\nNavigation: \(navigation.status); enabled \(navigation.enabled), pages \(navigation.pagesAvailable), Mission Control \(navigation.missionControlAvailable), desktop \(navigation.desktopAvailable)")
                         }
                         Button("Release all input") { pointer.releaseAll(); nativePinch.cancel(); navigation.cancel() }
-                        if connection.listening {
+                        if connection.listening || connection.cableConnectionsEnabled {
                             Button("Stop connections") { connection.stopListening() }
                             Text("Stopping connections disconnects the iPad. Starting again creates a new wireless pairing key.")
                                 .font(.footnote).foregroundStyle(.secondary)
@@ -155,11 +148,13 @@ struct CompanionPanel: View {
         GroupBox("Connect your iPad") {
             VStack(alignment: .leading, spacing: 14) {
                 if !connection.listening {
-                    Text("Start connections, then choose Wired, Wi-Fi or Bluetooth LE on the iPad. Wired needs no pairing.")
+                    Text(connection.cableConnectionsEnabled
+                        ? "An iPad on a USB cable connects by itself. Start connections here for Wi-Fi or Bluetooth LE pairing."
+                        : "Start connections to accept the cable again and enable wireless pairing.")
                     Button("Start connections") { connection.startListening() }
                         .buttonStyle(.borderedProminent)
                 } else if !connection.awaitingApproval {
-                    Text("For Wired, select this Mac and connect without a key. For Wi-Fi or Bluetooth LE, select the Mac and paste this key.")
+                    Text("For Wi-Fi or Bluetooth LE, select this Mac on the iPad and paste this key. A cabled iPad needs no key.")
                     Button("Copy pairing key") { copy(connection.pairingKey) }
                         .buttonStyle(.borderedProminent)
                     Text("Then tap Connect on the iPad and approve the matching code here.")
@@ -248,7 +243,7 @@ private struct BluetoothPairingControls: View {
     var body: some View {
         GroupBox("Connection options") {
             VStack(alignment: .leading, spacing: 12) {
-                Text("Wired connects directly over the iPad USB cable without pairing. Wi-Fi and Bluetooth LE use a pairing key and approval code.")
+                Text("An iPad on a USB cable connects by itself, without pairing. Wi-Fi and Bluetooth LE use a pairing key and approval code.")
                     .font(.subheadline).foregroundStyle(.secondary)
                 Text(connection.cableStatus).font(.subheadline).foregroundStyle(.secondary)
                 Toggle("Allow Bluetooth LE pairing", isOn: Binding(
@@ -261,6 +256,21 @@ private struct BluetoothPairingControls: View {
                         }
                     }))
                 Text(bluetooth.status).font(.footnote).foregroundStyle(.secondary)
+                if connection.boardNeedsKey || connection.boardRemembered {
+                    Divider()
+                    if connection.boardNeedsKey {
+                        Button("Remember this board") { connection.rememberBoard() }
+                            .buttonStyle(.borderedProminent)
+                        Text("Gives the board on the cable a permanent key. It can then connect over Wi-Fi or Bluetooth by itself, without a pairing key or approval.")
+                            .font(.footnote).foregroundStyle(.secondary)
+                    }
+                    if connection.boardRemembered {
+                        Label("Board remembered", systemImage: "checkmark.seal")
+                        Text("It connects by itself over Wi-Fi or Bluetooth while this app is running.")
+                            .font(.footnote).foregroundStyle(.secondary)
+                        Button("Forget board") { connection.forgetBoard() }
+                    }
+                }
             }.frame(maxWidth: .infinity, alignment: .leading).padding(8)
         }
     }
@@ -272,9 +282,9 @@ private struct BoardUSBControls: View {
     @ObservedObject var usb: USBSerialTransport
     @State private var selectedPort = ""
     var body: some View {
-        DisclosureGroup("Dedicated board USB") {
+        DisclosureGroup("Dedicated board USB (manual)") {
             VStack(alignment: .leading, spacing: 12) {
-                Text("For board firmware implementing the direct session protocol. No key or approval code is required. The iPad USB cable connects from the Wired tab instead.")
+                Text("A Smart Trackpad board connects by itself when plugged in. Use this only for a board that is not recognised: choose its port and open it.")
                     .font(.footnote).foregroundStyle(.secondary)
                 Picker("Board port", selection: $selectedPort) {
                     Text("Choose a port").tag("")

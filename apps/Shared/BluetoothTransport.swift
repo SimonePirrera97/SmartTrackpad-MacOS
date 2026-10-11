@@ -10,6 +10,8 @@ final class BluetoothTransport: NSObject, ObservableObject {
     static let serviceID = CBUUID(string: "ADCA1000-7D6D-4D46-ACF4-13F29B8A67E1")
     static let receiveID = CBUUID(string: "ADCA1001-7D6D-4D46-ACF4-13F29B8A67E1")
     static let transmitID = CBUUID(string: "ADCA1002-7D6D-4D46-ACF4-13F29B8A67E1")
+    static let fastReceiveID = CBUUID(string: "ADCA1003-7D6D-4D46-ACF4-13F29B8A67E1")
+    static let acknowledgmentID = CBUUID(string: "ADCA1004-7D6D-4D46-ACF4-13F29B8A67E1")
     struct Peer: Identifiable { let id: UUID; let name: String }
     @Published private(set) var peers: [Peer] = []
     @Published private(set) var status = "Bluetooth is off in this app"
@@ -27,6 +29,23 @@ final class BluetoothTransport: NSObject, ObservableObject {
     private var subscribedCentral: CBCentral?
     private var receiveCharacteristic: CBCharacteristic?
     private var transmitCharacteristic: CBMutableCharacteristic?
+    private var fastReceiveCharacteristic: CBCharacteristic?
+    private var acknowledgmentCharacteristic: CBCharacteristic?
+    private var serverAcknowledgment: CBMutableCharacteristic?
+    private var acknowledgmentSubscriber: CBCentral?
+    private var pendingAcknowledgment: Data?
+    private var writeWindow = BLEWriteWindow(token: UInt64.random(in: 1...UInt64.max))
+    private var writeReceiver = BLEWriteReceiver()
+    private var retryWrites: Task<Void, Never>?
+    private var fastWrites = false
+    var usesReliableWindow: Bool { fastWrites }
+    private var notifyReady = false
+    private var acknowledgmentReady = false
+    private var windowLoaded = false
+    private var writeLimit = 0
+    var diagnostics: String {
+        "\(fastWrites ? "Reliable window" : "Acknowledged writes"), payload limit \(writeLimit), pending \(writeWindow.count), frames \(writeWindow.sentFrames), retries \(writeWindow.retransmissions), max ack \(String(format: "%.1f", writeWindow.maximumAckMilliseconds)) ms"
+    }
     private var targetPort: UInt16 = 0
     private var proxy: NWListener?
     private var pipe: StreamByteRelay?
@@ -87,6 +106,12 @@ final class BluetoothTransport: NSObject, ObservableObject {
         let old = peer
         peer = nil; subscribedCentral = nil
         receiveCharacteristic = nil
+        fastReceiveCharacteristic = nil; acknowledgmentCharacteristic = nil
+        acknowledgmentSubscriber = nil; pendingAcknowledgment = nil
+        writeWindow = BLEWriteWindow(token: UInt64.random(in: 1...UInt64.max))
+        writeReceiver = BLEWriteReceiver()
+        retryWrites?.cancel(); retryWrites = nil
+        fastWrites = false; notifyReady = false; acknowledgmentReady = false; windowLoaded = false; writeLimit = 0
         readyHandler = nil
         let oldProxy = proxy; proxy = nil; oldProxy?.cancel()
         let oldPipe = pipe; pipe = nil; oldPipe?.close()
@@ -115,9 +140,12 @@ final class BluetoothTransport: NSObject, ObservableObject {
         if !serviceAdded {
             let rx = CBMutableCharacteristic(type: Self.receiveID, properties: [.write], value: nil, permissions: [.writeable])
             let tx = CBMutableCharacteristic(type: Self.transmitID, properties: [.notify], value: nil, permissions: [])
+            let fast = CBMutableCharacteristic(type: Self.fastReceiveID, properties: [.writeWithoutResponse], value: nil, permissions: [.writeable])
+            let ack = CBMutableCharacteristic(type: Self.acknowledgmentID, properties: [.notify], value: nil, permissions: [])
+            serverAcknowledgment = ack
             transmitCharacteristic = tx
             let service = CBMutableService(type: Self.serviceID, primary: true)
-            service.characteristics = [rx, tx]
+            service.characteristics = [rx, tx, fast, ack]
             serviceAdded = true
             peripheralManager?.add(service)
         } else {
@@ -186,6 +214,10 @@ final class BluetoothTransport: NSObject, ObservableObject {
     }
 
     private func pump() {
+        if !server, fastWrites {
+            pumpWindow()
+            return
+        }
         guard !outgoing.isEmpty else {
             let callback = delivered; delivered = nil
             callback?()
@@ -206,11 +238,56 @@ final class BluetoothTransport: NSObject, ObservableObject {
         } else {
             guard !writePending, let peer, let characteristic = receiveCharacteristic else { return }
             let chunk = Data(outgoing.prefix(peer.maximumWriteValueLength(for: .withResponse)))
+            writeLimit = chunk.count
             pendingWriteCount = chunk.count
             writePending = true
             peer.writeValue(chunk, for: characteristic, type: .withResponse)
             // Keep bytes until ATT confirms the write. Never send another write in flight.
         }
+    }
+
+    private func pumpWindow() {
+        guard let peer, let characteristic = fastReceiveCharacteristic else { return }
+        do {
+            if !windowLoaded, !outgoing.isEmpty {
+                try writeWindow.enqueue(outgoing); windowLoaded = true
+                if retryWrites == nil {
+                    retryWrites = Task { [weak self] in
+                        while !Task.isCancelled {
+                            try? await Task.sleep(for: .milliseconds(100))
+                            guard !Task.isCancelled, let self else { return }
+                            self.pumpWindow()
+                        }
+                    }
+                }
+            }
+            writeLimit = peer.maximumWriteValueLength(for: .withoutResponse) - BLEWriteWindow.headerSize
+            guard writeLimit > 0 else { fail("Bluetooth command payload unavailable"); return }
+            while peer.canSendWriteWithoutResponse,
+                  let packet = try writeWindow.next(at: ProcessInfo.processInfo.systemUptime, payloadLimit: writeLimit) {
+                peer.writeValue(packet, for: characteristic, type: .withoutResponse)
+            }
+            if windowLoaded, writeWindow.idle {
+                retryWrites?.cancel(); retryWrites = nil
+                outgoing.removeAll(keepingCapacity: true); windowLoaded = false
+                let callback = delivered; delivered = nil
+                callback?()
+                if callback != nil { onDrain?() }
+            }
+        } catch { fail("Bluetooth command stream invalid") }
+    }
+
+    private func pumpAcknowledgment() {
+        guard let bytes = pendingAcknowledgment, let manager = peripheralManager,
+              let subscriber = acknowledgmentSubscriber, let characteristic = serverAcknowledgment else { return }
+        if manager.updateValue(bytes, for: characteristic, onSubscribedCentrals: [subscriber]) {
+            pendingAcknowledgment = nil
+        }
+    }
+
+    private func startWhenSubscribed() {
+        guard notifyReady, !fastWrites || acknowledgmentReady else { return }
+        startProxy()
     }
 }
 
@@ -250,7 +327,7 @@ extension BluetoothTransport: @preconcurrency CBPeripheralDelegate {
         guard error == nil, let service = peripheral.services?.first(where: { $0.uuid == Self.serviceID }) else {
             fail("Bluetooth trackpad service unavailable"); return
         }
-        peripheral.discoverCharacteristics([Self.receiveID, Self.transmitID], for: service)
+        peripheral.discoverCharacteristics([Self.receiveID, Self.transmitID, Self.fastReceiveID, Self.acknowledgmentID], for: service)
     }
     func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
         guard peripheral === peer else { return }
@@ -260,15 +337,30 @@ extension BluetoothTransport: @preconcurrency CBPeripheralDelegate {
             fail("Bluetooth characteristics unavailable"); return
         }
         receiveCharacteristic = rx
+        if let fast = service.characteristics?.first(where: { $0.uuid == Self.fastReceiveID }), fast.properties.contains(.writeWithoutResponse),
+           let ack = service.characteristics?.first(where: { $0.uuid == Self.acknowledgmentID }), ack.properties.contains(.notify) {
+            fastReceiveCharacteristic = fast; acknowledgmentCharacteristic = ack
+            fastWrites = true
+            peripheral.setNotifyValue(true, for: ack)
+        }
         peripheral.setNotifyValue(true, for: tx)
     }
     func peripheral(_ peripheral: CBPeripheral, didUpdateNotificationStateFor characteristic: CBCharacteristic, error: Error?) {
-        guard peripheral === peer, characteristic.uuid == Self.transmitID else { return }
+        guard peripheral === peer, characteristic.uuid == Self.transmitID || characteristic.uuid == Self.acknowledgmentID else { return }
         guard error == nil, characteristic.isNotifying else { fail("Bluetooth notifications unavailable"); return }
-        startProxy()
+        if characteristic.uuid == Self.transmitID { notifyReady = true }
+        else { acknowledgmentReady = true }
+        startWhenSubscribed()
     }
     func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
-        guard peripheral === peer, characteristic.uuid == Self.transmitID else { return }
+        guard peripheral === peer else { return }
+        if characteristic.uuid == Self.acknowledgmentID {
+            guard fastWrites, error == nil, let bytes = characteristic.value else { fail("Bluetooth acknowledgment unavailable"); return }
+            do { try writeWindow.acknowledge(bytes, at: ProcessInfo.processInfo.systemUptime); pumpWindow() }
+            catch { fail("Bluetooth acknowledgment invalid") }
+            return
+        }
+        guard characteristic.uuid == Self.transmitID else { return }
         guard error == nil, let bytes = characteristic.value, let pipe else { fail("Bluetooth receive failed"); return }
         pipe.accept(bytes)
     }
@@ -279,6 +371,10 @@ extension BluetoothTransport: @preconcurrency CBPeripheralDelegate {
         outgoing.removeFirst(count)
         writePending = false
         pump()
+    }
+    func peripheralIsReady(toSendWriteWithoutResponse peripheral: CBPeripheral) {
+        guard peripheral === peer else { return }
+        pumpWindow()
     }
 }
 
@@ -298,27 +394,49 @@ extension BluetoothTransport: @preconcurrency CBPeripheralManagerDelegate {
         else if pipe == nil { status = "Bluetooth pairing available" }
     }
     func peripheralManager(_ peripheral: CBPeripheralManager, central: CBCentral, didSubscribeTo characteristic: CBCharacteristic) {
+        if characteristic.uuid == Self.acknowledgmentID {
+            guard enabled, acknowledgmentSubscriber == nil,
+                  subscribedCentral == nil || subscribedCentral?.identifier == central.identifier,
+                  canAccept?() != false || subscribedCentral?.identifier == central.identifier else { return }
+            acknowledgmentSubscriber = central
+            return
+        }
         guard enabled, characteristic.uuid == Self.transmitID, subscribedCentral == nil, canAccept?() != false else { return }
+        guard acknowledgmentSubscriber == nil || acknowledgmentSubscriber?.identifier == central.identifier else { return }
         subscribedCentral = central
         let socket = NWConnection(host: "127.0.0.1", port: NWEndpoint.Port(rawValue: targetPort)!, using: .tcp)
         makePipe(socket)
     }
     func peripheralManager(_ peripheral: CBPeripheralManager, central: CBCentral, didUnsubscribeFrom characteristic: CBCharacteristic) {
-        guard central.identifier == subscribedCentral?.identifier else { return }
+        guard central.identifier == subscribedCentral?.identifier || central.identifier == acknowledgmentSubscriber?.identifier else { return }
         fail("Bluetooth peer disconnected")
     }
     func peripheralManager(_ peripheral: CBPeripheralManager, didReceiveWrite requests: [CBATTRequest]) {
         // Validate the whole batch before modifying the byte stream.
         guard enabled, let pipe, requests.allSatisfy({
-            $0.central.identifier == subscribedCentral?.identifier && $0.characteristic.uuid == Self.receiveID
+            $0.central.identifier == subscribedCentral?.identifier && ($0.characteristic.uuid == Self.receiveID || $0.characteristic.uuid == Self.fastReceiveID)
                 && $0.offset == 0 && $0.value != nil
         }) else {
-            if let first = requests.first { peripheral.respond(to: first, withResult: .unlikelyError) }
+            if let first = requests.first, first.characteristic.uuid == Self.receiveID { peripheral.respond(to: first, withResult: .unlikelyError) }
             return
         }
-        for request in requests { pipe.accept(request.value!) }
-        if let first = requests.first { peripheral.respond(to: first, withResult: .success) }
+        for request in requests {
+            if request.characteristic.uuid == Self.fastReceiveID {
+                guard acknowledgmentSubscriber?.identifier == request.central.identifier else { fail("Bluetooth command channel was not subscribed"); return }
+                do {
+                    let result = try writeReceiver.accept(request.value!)
+                    if let bytes = result.bytes { pipe.accept(bytes) }
+                    pendingAcknowledgment = result.acknowledgment
+                    fastWrites = true
+                } catch { fail("Bluetooth command packet invalid"); return }
+            } else {
+                guard !fastWrites else { fail("Bluetooth write modes changed during a stream"); return }
+                pipe.accept(request.value!)
+            }
+        }
+        pumpAcknowledgment()
+        if let first = requests.first, first.characteristic.uuid == Self.receiveID { peripheral.respond(to: first, withResult: .success) }
     }
-    func peripheralManagerIsReady(toUpdateSubscribers peripheral: CBPeripheralManager) { pump() }
+    func peripheralManagerIsReady(toUpdateSubscribers peripheral: CBPeripheralManager) { pumpAcknowledgment(); pump() }
 }
 

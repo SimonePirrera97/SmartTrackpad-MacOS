@@ -13,108 +13,6 @@ final class NativePinchBackend: ObservableObject {
     private var anchor = CGPoint.zero
     private var targetWindow: NativeGestureWindow?
     private var nativeStarted = false
-    @Published private(set) var comparing = false
-    @Published private(set) var comparisonStatus = ""
-    private var comparisonMonitor: Any?
-    private var comparisonTap: CFMachPort?
-    private var comparisonSource: CFRunLoopSource?
-    private var comparisonTimeout: Task<Void, Never>?
-    private var comparisonCounts: [String: Int] = [:]
-    private var comparisonSamples: [String] = []
-    private var comparisonStarted = Date()
-
-    var comparisonReport: String {
-        let counts = comparisonCounts.keys.sorted().map { "\($0): \(comparisonCounts[$0]!)" }.joined(separator: ", ")
-        return "Pinch comparison (gesture/scroll metadata only)\n\(comparisonStatus)\n\(counts)\n" + comparisonSamples.joined(separator: "\n")
-    }
-
-    /// User-started, bounded observation; never reads keys, document contents or clipboard data.
-    func startComparison() {
-        stopComparison()
-        comparisonCounts.removeAll()
-        comparisonSamples.removeAll()
-        comparisonStarted = Date()
-        // AppKit's global monitor omitted native magnify events in the first
-        // physical report. Observe only gesture/scroll Quartz types, listen-only.
-        let mask = (CGEventMask(1) << 22) | (CGEventMask(1) << 29) | (CGEventMask(1) << 30)
-        comparisonTap = CGEvent.tapCreate(tap: .cgSessionEventTap, place: .headInsertEventTap,
-            options: .listenOnly, eventsOfInterest: mask, callback: { _, type, event, context in
-                guard let context else { return Unmanaged.passUnretained(event) }
-                let backend = Unmanaged<NativePinchBackend>.fromOpaque(context).takeUnretainedValue()
-                // The source is installed exclusively on the main run loop.
-                MainActor.assumeIsolated {
-                    if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
-                        if let tap = backend.comparisonTap { CGEvent.tapEnable(tap: tap, enable: true) }
-                    } else if event.getIntegerValueField(.eventSourceUserData) != NativeMagnifyEvents.comparisonTag,
-                              let cocoa = NSEvent(cgEvent: event) {
-                        backend.recordComparison(cocoa, origin: "Quartz-observed")
-                    }
-                }
-                return Unmanaged.passUnretained(event)
-            }, userInfo: Unmanaged.passUnretained(self).toOpaque())
-        var method = "Quartz gesture/scroll observer"
-        if let comparisonTap,
-           let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, comparisonTap, 0) {
-            comparisonSource = source
-            CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
-            CGEvent.tapEnable(tap: comparisonTap, enable: true)
-        } else {
-            if let comparisonTap { CFMachPortInvalidate(comparisonTap) }
-            comparisonTap = nil
-            method = "Limited pinch observer"
-            comparisonMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.magnify, .scrollWheel, .beginGesture, .endGesture]) { [weak self] event in
-                MainActor.assumeIsolated {
-                    guard event.cgEvent?.getIntegerValueField(.eventSourceUserData) != NativeMagnifyEvents.comparisonTag else { return }
-                    self?.recordComparison(event, origin: "AppKit-observed")
-                }
-            }
-            guard comparisonMonitor != nil else {
-                comparisonStatus = "Comparison observer unavailable; no permission settings changed."
-                return
-            }
-        }
-        comparing = true
-        comparisonStatus = "Recording for 30 seconds via \(method): MacBook pinch first, then iPad over the same content."
-        comparisonTimeout = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(30))
-            guard !Task.isCancelled else { return }
-            self?.stopComparison()
-        }
-    }
-
-    func stopComparison() {
-        comparisonTimeout?.cancel()
-        comparisonTimeout = nil
-        if let comparisonTap { CGEvent.tapEnable(tap: comparisonTap, enable: false); CFMachPortInvalidate(comparisonTap) }
-        if let comparisonSource { CFRunLoopRemoveSource(CFRunLoopGetMain(), comparisonSource, .commonModes) }
-        comparisonTap = nil; comparisonSource = nil
-        if let comparisonMonitor { NSEvent.removeMonitor(comparisonMonitor) }
-        comparisonMonitor = nil
-        if comparing { comparisonStatus = "Comparison finished. Copy diagnostics to share the captured metadata." }
-        comparing = false
-    }
-
-    private func recordComparison(_ event: NSEvent, origin: String) {
-        guard comparing else { return }
-        let kind = "\(origin)/\(event.type.rawValue)"
-        comparisonCounts[kind, default: 0] += 1
-        // Retain a few representative samples per kind, with a strict total bound.
-        guard comparisonCounts[kind]! <= 12, comparisonSamples.count < 72 else { return }
-        let cg = event.cgEvent
-        let location = cg?.location ?? .zero
-        let time = String(format: "%.3f", Date().timeIntervalSince(comparisonStarted))
-        let magnitude = event.type == .magnify ? String(format: "%.5f", event.magnification) : "-"
-        let wheel = event.type == .scrollWheel ? String(format: "%.3f,%.3f", event.scrollingDeltaX, event.scrollingDeltaY) : "-"
-        let phase = event.type == .magnify || event.type == .scrollWheel || event.type.rawValue == 36 ? event.phase.rawValue : 0
-        let momentum = event.type == .scrollWheel ? event.momentumPhase.rawValue : 0
-        let byteCount = cg?.data.map { CFDataGetLength($0) } ?? 0
-        let routed = cg.flatMap { NativeGestureWindowLocation.point(in: $0) }.map { "\($0.x),\($0.y)" } ?? "unavailable"
-        let fieldSummary = [55, 110, 111, 117, 132, 133, 138].map { raw in
-            "\(String(raw, radix: 16))=\(CGEventField(rawValue: UInt32(raw)).map { cg?.getIntegerValueField($0) ?? 0 } ?? 0)"
-        }.joined(separator: ",")
-        comparisonSamples.append("t=\(time) \(kind) phase=\(phase) momentum=\(momentum) flags=\(event.modifierFlags.rawValue) window=\(event.windowNumber) cgLocation=\(location.x),\(location.y) windowLocation=\(event.locationInWindow.x),\(event.locationInWindow.y) encodedWindowLocation=\(routed) magnify=\(magnitude) wheel=\(wheel) bytes=\(byteCount) \(fieldSummary)")
-    }
-
     private let persistSettings: Bool
     private let postEvent: (CGEvent) -> Void
     private let cursorPosition: () -> CGPoint?
@@ -174,13 +72,11 @@ final class NativePinchBackend: ObservableObject {
             status = "Pinch to zoom is unavailable."
             return
         }
-        if let cocoa = NSEvent(cgEvent: event) { recordComparison(cocoa, origin: "iPad-sent") }
         postEvent(event)
-        if let cocoa = NSEvent(cgEvent: companion) { recordComparison(cocoa, origin: "iPad-sent") }
         postEvent(companion)
         nativeStarted = phase == .began || phase == .changed
         active = phase == .began || phase == .changed
-        status = active ? (targetWindow == nil ? "Zooming" : "Zooming") : "Pinch ended"
+        status = active ? "Zooming" : "Pinch ended"
         if !active { targetWindow = nil }
     }
 
@@ -189,9 +85,7 @@ final class NativePinchBackend: ObservableObject {
         if nativeStarted, postingAccess(),
            let event = NativeMagnifyEvents.make(amount: 0, phase: .cancelled, location: anchor, window: targetWindow),
            let companion = NativeMagnifyEvents.translation(phase: .cancelled, location: anchor, window: targetWindow) {
-            if let cocoa = NSEvent(cgEvent: event) { recordComparison(cocoa, origin: "iPad-sent") }
             postEvent(event)
-            if let cocoa = NSEvent(cgEvent: companion) { recordComparison(cocoa, origin: "iPad-sent") }
             postEvent(companion)
         }
         active = false

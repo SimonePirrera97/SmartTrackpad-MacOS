@@ -30,7 +30,7 @@ final class CompanionService: ObservableObject {
         }
         observers.append(NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { [weak appControls] _ in
-                MainActor.assumeIsolated { appControls?.refresh() }
+                MainActor.assumeIsolated { _ = appControls?.refresh() }
             })
         connection.preferenceSnapshot = { MacTrackpadPreferences.snapshot() }
         connection.onInput = { [weak pointer, weak actions, weak appControls, weak nativePinch, weak navigation] command in
@@ -72,9 +72,6 @@ final class CompanionService: ObservableObject {
                 }
                 pointer.perform(command)
             }
-        }
-        connection.onPointerMove = { [weak pointer, weak nativePinch, weak navigation] delta in
-            nativePinch?.cancel(); navigation?.cancel(); pointer?.move(delta)
         }
         connection.onResetInput = { [weak pointer, weak nativePinch, weak navigation] in pointer?.releaseAll(); nativePinch?.cancel(); navigation?.cancel() }
         pointer.$enabled.sink { [weak nativePinch, weak navigation] enabled in

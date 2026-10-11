@@ -46,7 +46,7 @@ struct AppControlContext: Codable, Sendable, Equatable {
     }
     func accepts(_ request: AppControlRequest, activeApp: ControlApp) -> Bool {
         valid && request.valid && app == activeApp && request.app == app
-            && request.token == token && actions.contains(request.action)
+            && UUID(uuidString: request.token) == UUID(uuidString: token) && actions.contains(request.action)
     }
 }
 struct AppControlRequest: Codable, Sendable, Equatable {

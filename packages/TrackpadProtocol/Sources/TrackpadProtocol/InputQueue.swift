@@ -1,57 +1,88 @@
 import Foundation
 
-/// FIFO barriers preserve button/scroll lifecycle order. High-rate motion is coalesced.
+/// Bounded ring FIFO. Lifecycle/button/action barriers remain ordered; changes
+/// coalesce without clipping distance, flattening reversals or adding pinch scales.
 struct InputQueue {
-    private struct Entry { var command: InputCommand; var time: Double }
-    private var entries: [Entry] = []
+    private struct Entry { var command: InputCommand; var time: Double; var direction: Double = 0 }
     static let capacity = 64
-    var count: Int { entries.count }
+    private var entries = [Entry?](repeating: nil, count: capacity)
+    private var head = 0
+    private(set) var count = 0
+    private var lastNavigation: [InputKind: Double] = [:]
+    private(set) var coalesced: UInt64 = 0
+    private(set) var staleDropped: UInt64 = 0
+    private(set) var highWater = 0
 
     mutating func append(_ command: InputCommand, at time: Double) -> Bool {
         guard command.valid, time.isFinite else { return false }
-        if command.kind == .releaseAll { entries.removeAll() }
-        if let last = entries.last, last.command.kind == command.kind,
-           command.kind == .move || (command.kind == .scroll && command.phase == .changed && last.command.phase == .changed),
-           let old = last.command.delta, let delta = command.delta {
-            var combined = command
-            let fresh = time - last.time <= 0.25
-            let sum = PointerDelta(dx: (fresh ? old.dx : 0) + delta.dx,
-                                   dy: (fresh ? old.dy : 0) + delta.dy)
-            if command.kind == .scroll, fresh {
-                // Preserve large flick distance and reversals; never clip a combined
-                // scroll or collapse opposite-direction samples into a zero sample.
-                let reversed = old.dx * delta.dx + old.dy * delta.dy < 0
-                let duration = (last.command.sampleIntervalMilliseconds ?? 0) + (command.sampleIntervalMilliseconds ?? 0)
-                if !sum.scrollValid || reversed || duration > 250 {
-                    guard entries.count < Self.capacity else { return false }
-                    entries.append(Entry(command: command, time: time))
-                    return true
-                }
-            }
-            combined.delta = command.kind == .scroll ? sum
-                : PointerDelta(dx: max(-128, min(128, sum.dx)), dy: max(-128, min(128, sum.dy)))
-            if fresh, let previousInterval = last.command.sampleIntervalMilliseconds,
-               let interval = command.sampleIntervalMilliseconds {
-                combined.sampleIntervalMilliseconds = min(250, previousInterval + interval)
-            }
-            entries[entries.count - 1] = Entry(command: combined, time: time)
-            return true
+        if command.kind == .releaseAll { clear() }
+        var direction = 0.0
+        if command.kind == .pageSwipe || command.kind == .missionControl {
+            direction = command.progress! - (lastNavigation[command.kind] ?? command.progress!)
+            lastNavigation[command.kind] = command.endsGesture ? nil : command.progress
         }
-        guard entries.count < Self.capacity else { return false }
-        entries.append(Entry(command: command, time: time))
+        if count > 0 {
+            let index = (head + count - 1) % Self.capacity
+            let last = entries[index]!
+            if let combined = merge(last.command, command, fresh: time - last.time <= 0.25,
+                                    direction: direction, previousDirection: last.direction) {
+                entries[index] = Entry(command: combined, time: time, direction: direction)
+                coalesced += 1
+                return true
+            }
+        }
+        guard count < Self.capacity else { return false }
+        entries[(head + count) % Self.capacity] = Entry(command: command, time: time, direction: direction)
+        count += 1; highWater = max(highWater, count)
         return true
     }
 
+    private func merge(_ old: InputCommand, _ next: InputCommand, fresh: Bool,
+                       direction: Double, previousDirection: Double) -> InputCommand? {
+        guard old.kind == next.kind else { return nil }
+        let change = old.phase == .changed && next.phase == .changed
+        guard next.kind == .move || (change && [.scroll, .magnify, .pageSwipe, .missionControl].contains(next.kind)) else { return nil }
+        guard fresh else { return next }
+        var combined = next
+        let duration = (old.sampleIntervalMilliseconds ?? 0) + (next.sampleIntervalMilliseconds ?? 0)
+        if duration > 250 { return nil }
+        switch next.kind {
+        case .move, .scroll:
+            let a = old.delta!, b = next.delta!
+            if next.kind == .scroll && a.dx * b.dx + a.dy * b.dy < 0 { return nil }
+            let delta = PointerDelta(dx: a.dx + b.dx, dy: a.dy + b.dy)
+            guard next.kind == .scroll ? delta.scrollValid : delta.valid else { return nil }
+            combined.delta = delta
+        case .magnify:
+            let a = old.magnification!, b = next.magnification!
+            guard a * b >= 0 else { return nil }
+            let amount = (1 + a) * (1 + b) - 1
+            guard abs(amount) <= 0.5 else { return nil }
+            combined.magnification = amount
+        case .pageSwipe, .missionControl:
+            // Absolute progress replaces the previous sample, but a reversal
+            // remains a barrier so finger-controlled retreat is observable.
+            guard direction * previousDirection >= 0 else { return nil }
+        default: return nil
+        }
+        if old.sampleIntervalMilliseconds != nil && next.sampleIntervalMilliseconds != nil {
+            combined.sampleIntervalMilliseconds = duration
+        }
+        return combined.valid ? combined : nil
+    }
+
     mutating func pop(at time: Double) -> InputCommand? {
-        while !entries.isEmpty {
-            let entry = entries.removeFirst()
-            let release = entry.command.kind == .releaseAll
-                || (entry.command.kind == .button && entry.command.pressed == false)
-                || entry.command.endsGesture
-            if release || time - entry.time <= 0.25 { return entry.command }
+        while count > 0 {
+            let entry = entries[head]!
+            entries[head] = nil; head = (head + 1) % Self.capacity; count -= 1
+            if entry.command.releases || time - entry.time <= 0.25 { return entry.command }
+            staleDropped += 1
         }
         return nil
     }
-
-    mutating func reset() { entries.removeAll() }
+    private mutating func clear() {
+        while count > 0 { entries[head] = nil; head = (head + 1) % Self.capacity; count -= 1 }
+        lastNavigation.removeAll(keepingCapacity: true)
+    }
+    mutating func reset() { clear(); coalesced = 0; staleDropped = 0; highWater = 0 }
 }

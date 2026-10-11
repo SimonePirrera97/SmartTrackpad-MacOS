@@ -46,7 +46,6 @@ final class QuartzPointerBackend: NSObject, ObservableObject, MacPointerBackend 
         refreshPermission()
     }
 
-    func move(_ delta: PointerDelta) { perform(.move(delta)) }
 
     func perform(_ command: InputCommand) {
         guard command.valid else { return }

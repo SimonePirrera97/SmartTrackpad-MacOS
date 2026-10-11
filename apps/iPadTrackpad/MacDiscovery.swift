@@ -8,28 +8,35 @@ struct DiscoveredMac: Identifiable {
     let endpoint: NWEndpoint
 }
 
-/// Bonjour locates companions; TLS and explicit approval still authorize input.
+/// Bonjour locates companions on Wi-Fi; TLS and explicit approval still authorize input.
 @MainActor
 final class MacDiscovery: ObservableObject {
     @Published private(set) var macs: [DiscoveredMac] = []
     @Published private(set) var status = "Looking for Macs…"
     private var browser: NWBrowser?
+    private var searchTimeout: Task<Void, Never>?
 
-    func start(transport: ConnectionTransport? = nil) {
+    func start() {
         guard browser == nil else { return }
-        status = transport == .wired ? "Looking for the Mac on the USB cable…" : "Looking for Macs…"
+        status = "Looking for Macs…"
         let parameters = NWParameters.tcp
         parameters.includePeerToPeer = false
-        transport?.configure(parameters)
-        let next = NWBrowser(for: .bonjour(type: (transport == .wired ? ConnectionModel.cableBonjourType : ConnectionModel.bonjourType), domain: "local."), using: parameters)
+        ConnectionTransport.wifi.configure(parameters)
+        let next = NWBrowser(for: .bonjour(type: ConnectionModel.bonjourType, domain: "local."), using: parameters)
         browser = next
+        searchTimeout = Task { [weak self, weak next] in
+            try? await Task.sleep(for: .seconds(6))
+            guard !Task.isCancelled, let self, let next, self.browser === next,
+                  self.macs.isEmpty, case .ready = next.state else { return }
+            self.status = "No Mac found yet. Start connections on the Mac and check the Wi-Fi network."
+        }
         next.stateUpdateHandler = { [weak self, weak next] state in
             Task { @MainActor in
                 guard let self, let next, self.browser === next else { return }
                 switch state {
-                case .ready: self.status = transport == .wired ? "Looking for the Mac on the USB cable…" : "Looking for Macs on Wi-Fi…"
+                case .ready: self.status = "Looking for Macs on Wi-Fi…"
                 case .waiting(let error), .failed(let error):
-                    self.status = transport == .wired ? "USB discovery unavailable: \(error.localizedDescription). Connect the cable, unlock both devices and start connections on the Mac." : "Discovery unavailable: \(error.localizedDescription). Check Local Network permission, or use QR/manual pairing."
+                    self.status = "Discovery unavailable: \(error.localizedDescription). Check Local Network permission, or use QR/manual pairing."
                 default: break
                 }
             }
@@ -41,19 +48,11 @@ final class MacDiscovery: ObservableObject {
                 for result in results {
                     if case let .service(name, type, domain, _) = result.endpoint {
                         let id = "\(name).\(type).\(domain)"
-                        if transport == .wired {
-                            // Interface-scoped service resolution prevents a Wi-Fi result
-                            // or a generic multi-interface endpoint from entering cable mode.
-                            for interface in result.interfaces where interface.type != .wifi && interface.type != .cellular && interface.type != .loopback {
-                                let scopedID = id + "/" + interface.name
-                                let endpoint = NWEndpoint.service(name: name, type: type, domain: domain, interface: interface)
-                                unique[scopedID] = DiscoveredMac(id: scopedID, name: name, endpoint: endpoint)
-                            }
-                        } else { unique[id] = DiscoveredMac(id: id, name: name, endpoint: result.endpoint) }
+                        unique[id] = DiscoveredMac(id: id, name: name, endpoint: result.endpoint)
                     }
                 }
                 self.macs = unique.values.sorted { $0.id < $1.id }
-                self.status = self.macs.isEmpty ? (transport == .wired ? "No Mac found on the cable yet. Connect the USB cable and start connections on the Mac." : "No Mac found yet. Start pairing on the Mac and check both devices are on the same selected network.") : (transport == .wired ? "Mac found on the USB cable" : "Macs found nearby")
+                self.status = self.macs.isEmpty ? "No Mac found yet. Start connections on the Mac and check both devices are on the same Wi-Fi." : "Macs found nearby"
             }
         }
         next.start(queue: .main)
@@ -62,6 +61,7 @@ final class MacDiscovery: ObservableObject {
     func stop() {
         let old = browser
         browser = nil
+        searchTimeout?.cancel(); searchTimeout = nil
         old?.cancel()
         macs = []
     }

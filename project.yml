@@ -21,12 +21,13 @@ targets:
       - packages/GestureCore/Sources/GestureCore
       - path: assets/lucide/LICENSE
         buildPhase: resources
+      - path: assets/SmartTrackpad-LICENSE.txt
+        buildPhase: resources
     info:
       path: apps/iPadTrackpad/Info.plist
       properties:
         NSBonjourServices:
           - _smarttrackpad._tcp
-          - _stpad-usb._tcp
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.simonepirrera.smarttrackpad.ipad
@@ -34,7 +35,7 @@ targets:
         DEVELOPMENT_TEAM: F3RB9G843M
         TARGETED_DEVICE_FAMILY: '2'
         INFOPLIST_KEY_CFBundleDisplayName: Smart Trackpad
-        INFOPLIST_KEY_NSLocalNetworkUsageDescription: Discover and connect to your Mac over Wi-Fi or a direct USB cable.
+        INFOPLIST_KEY_NSLocalNetworkUsageDescription: Discover and connect to your Mac over Wi-Fi.
         INFOPLIST_KEY_NSCameraUsageDescription: Scan the pairing QR code shown by your Mac. Camera images are not saved or sent.
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
@@ -49,19 +50,20 @@ targets:
       - packages/GestureCore/Sources/GestureCore
       - path: assets/lucide/LICENSE
         buildPhase: resources
+      - path: assets/SmartTrackpad-LICENSE.txt
+        buildPhase: resources
     info:
       path: apps/MacTrackpadCompanion/Info.plist
       properties:
         NSBonjourServices:
           - _smarttrackpad._tcp
-          - _stpad-usb._tcp
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.simonepirrera.smarttrackpad.mac
         INFOPLIST_KEY_CFBundleDisplayName: Smart Trackpad Companion
         INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription: Connect your iPad and Mac directly over Bluetooth LE for Smart Trackpad.
         DEVELOPMENT_TEAM: F3RB9G843M
-        INFOPLIST_KEY_NSLocalNetworkUsageDescription: Discover and connect to your iPad over Wi-Fi or a direct USB cable.
+        INFOPLIST_KEY_NSLocalNetworkUsageDescription: Let your iPad find and connect to this Mac over Wi-Fi.
         INFOPLIST_KEY_LSUIElement: YES
         ENABLE_APP_SANDBOX: NO
 schemes:

@@ -22,7 +22,7 @@ extension InputKind {
         case .showDesktop: "action.showDesktop.experimental"
         }
     }
-    static let supportedCapabilities = ["pointer.move", "mouse.click", "mouse.button", "scroll.pixel", "input.releaseAll", "scroll.stopMomentum", "action.standard", "scroll.pixel.highRange", "gesture.magnify.experimental", "gesture.pages.experimental", "gesture.missionControl.experimental", "action.showDesktop.experimental", "settings.trackpadPreferences", "action.appControls.v2"]
+    static let supportedCapabilities = ["pointer.move", "mouse.click", "mouse.button", "scroll.pixel", "input.releaseAll", "scroll.stopMomentum", "action.standard", "scroll.pixel.highRange", "gesture.magnify.experimental", "gesture.pages.experimental", "gesture.missionControl.experimental", "action.showDesktop.experimental", "settings.trackpadPreferences", "action.appControls.v2", "input.binary.v1", "input.ack.v1"]
 }
 enum ScrollPhase: String, Codable, Sendable { case began, changed, ended, cancelled }
 
@@ -42,6 +42,11 @@ struct InputCommand: Codable, Sendable, Equatable {
 
     var endsGesture: Bool {
         [.scroll, .magnify, .pageSwipe, .missionControl].contains(kind) && (phase == .ended || phase == .cancelled)
+    }
+
+    /// Delivered even when stale, so a late packet can never leave input held.
+    var releases: Bool {
+        kind == .releaseAll || (kind == .button && pressed == false) || endsGesture
     }
 
     var valid: Bool {

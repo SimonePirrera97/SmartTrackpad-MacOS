@@ -5,7 +5,6 @@ struct GestureOptions: Equatable {
     var twoFingerTap = true
     var holdToDrag = true
     var threeFingerDrag = false
-    var threeFingerMissionControl = false
     var nativePinch = false
     var interactiveMissionControl = false
     var pageSwipes = false
@@ -31,7 +30,6 @@ struct TrackpadGestureEngine {
     private var lastUpdate: Double?
     private var twoFingerBase: (distance: Double, angle: Double)?
     private var holdAnchor: (point: TouchPoint, time: Double)?
-    private var threeFingerOrigin: TouchPoint?
     private var pinchMotion = PinchMotion()
     private(set) var pinchScale: Double?
     private var pinching = false
@@ -64,7 +62,7 @@ struct TrackpadGestureEngine {
         }
         peak = max(peak, touches.count)
         if peak > 1 || travel > options.movementThreshold { lastTap = nil }
-        if touches.count > 3 || (touches.count == 3 && !options.threeFingerDrag && !options.threeFingerMissionControl && !options.interactiveMissionControl && !options.pageSwipes) { suppressed = true }
+        if touches.count > 3 || (touches.count == 3 && !options.threeFingerDrag && !options.interactiveMissionControl && !options.pageSwipes) { suppressed = true }
         if touches.count == 1 && previous.count == 1 && Set(touches.keys) != Set(previous.keys) { suppressed = true }
 
         navigation.pagesEnabled = options.pageSwipes && !options.threeFingerDrag
@@ -138,11 +136,9 @@ struct TrackpadGestureEngine {
             output.append(.button(.left, pressed: false)); dragging = false; suppressed = true
         }
         if touches.count == 3 && previous.count == 3 && Set(touches.keys) != Set(previous.keys) { suppressed = true }
-        if touches.count == 3 && previous.count != 3 { threeFingerOrigin = centroid(touches) }
         if touches.count < 3 && previous.count == 3 {
             // Finger removal cannot turn a system action into a click or scroll.
             suppressed = true
-            threeFingerOrigin = nil
         }
         if scrolling && touches.count != 2 {
             output.append(.scroll(PointerDelta(dx: 0, dy: 0), phase: .ended)); scrolling = false
@@ -177,16 +173,6 @@ struct TrackpadGestureEngine {
                 output.append(.button(.left, pressed: true)); dragging = true; dragContacts = 1; lastTap = nil
             }
             if let delta = pointerDelta { output.append(.move(delta)) }
-        } else if !suppressed, touches.count == 3, options.threeFingerMissionControl, !options.threeFingerDrag,
-                  Set(touches.keys) == Set(previous.keys), let origin = threeFingerOrigin {
-            let center = centroid(touches)
-            let dx = center.x - origin.x
-            let dy = center.y - origin.y
-            if dy <= -80 && abs(dx) <= abs(dy) * 0.7 {
-                output.append(.action(.missionControl))
-                suppressed = true
-                lastTap = nil
-            }
         } else if !suppressed, touches.count == 3, options.threeFingerDrag,
                   Set(touches.keys) == Set(previous.keys), travel > options.movementThreshold {
             let center = centroid(touches)
@@ -226,7 +212,6 @@ struct TrackpadGestureEngine {
         lastUpdate = nil
         twoFingerBase = nil
         holdAnchor = nil
-        threeFingerOrigin = nil
         pinchMotion.reset()
         pinchScale = nil
         pointerMotion.reset()

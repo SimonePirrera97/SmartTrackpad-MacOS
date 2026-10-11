@@ -48,7 +48,6 @@ final class TrackpadSettings: ObservableObject {
         options.twoFingerTap = twoFingerTap
         options.holdToDrag = holdToDrag
         options.threeFingerDrag = threeFingerDrag
-        options.threeFingerMissionControl = threeFingerMissionControl
         options.holdDuration = holdDuration
         options.tapDuration = tapDuration
         options.movementThreshold = tapTolerance
@@ -65,9 +64,9 @@ final class TrackpadSettings: ObservableObject {
         dragging = false
     }
 
-    func scaledCommands(_ command: InputCommand) -> [InputCommand] {
+    func emitScaled(_ command: InputCommand, output: (InputCommand) -> Void) {
         let factor = command.kind == .scroll ? scrollSpeed * (naturalScroll ? 1 : -1) : sensitivity
-        return MotionScaling.commands(command, factor: factor)
+        MotionScaling.emit(command, factor: factor, output: output)
     }
 
     private func save() {

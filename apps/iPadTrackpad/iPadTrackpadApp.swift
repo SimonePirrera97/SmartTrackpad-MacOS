@@ -4,7 +4,7 @@ import SwiftUI
 struct iPadTrackpadApp: App {
     var body: some Scene {
         WindowGroup {
-            HelloView()
+            TrackpadView()
         }
     }
 }

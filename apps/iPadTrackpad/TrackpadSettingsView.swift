@@ -6,11 +6,15 @@ struct TrackpadSettingsView: View {
     var missionControlAvailable = false
     var pagesAvailable = false
     var macPreferences: TrackpadPreferences?
+    var copyDiagnostics: () -> Void = {}
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         NavigationStack {
             Form {
+                Section("Connection") {
+                    Button("Copy connection diagnostics", action: copyDiagnostics)
+                }
                 if let macPreferences {
                     Section("Mac preferences") {
                         Button("Use Mac click, drag and scroll settings") { settings.applyMacPreferences(macPreferences) }

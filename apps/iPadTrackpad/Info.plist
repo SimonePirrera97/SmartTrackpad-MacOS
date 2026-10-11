@@ -21,7 +21,6 @@
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_smarttrackpad._tcp</string>
-		<string>_stpad-usb._tcp</string>
 	</array>
 </dict>
 </plist>

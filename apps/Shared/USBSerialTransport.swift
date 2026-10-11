@@ -4,12 +4,13 @@ import Combine
 import Network
 import Darwin
 
-/// Board USB CDC adapter. A physical port carries the direct session byte stream, never input
-/// commands directly. iPadOS has no corresponding generic USB CDC adapter.
+/// USB byte-stream adapter: a board's CDC serial port, or a cabled iPad reached
+/// through USBMux. It relays the direct session byte stream to a loopback socket.
 @MainActor
 final class USBSerialTransport: ObservableObject {
     @Published private(set) var ports: [String] = []
-    @Published private(set) var status = "Board USB is closed"
+    @Published private(set) var status = "USB is closed"
+    private var name = "USB"
     @Published private(set) var opened = false
     var onFailure: ((String) -> Void)?
     private var generation = UUID()
@@ -19,6 +20,13 @@ final class USBSerialTransport: ObservableObject {
     private var relay: StreamByteRelay?
     private var pending = Data()
     private var completion: (() -> Void)?
+
+    /// The dedicated board names itself through its USB serial number, which
+    /// macOS puts in the device name, so it is found without a port picker.
+    static var boardPort: String? {
+        ((try? FileManager.default.contentsOfDirectory(atPath: "/dev")) ?? [])
+            .filter { $0.hasPrefix("cu.usbmodemSmartTrackpad") }.sorted().first.map { "/dev/" + $0 }
+    }
 
     func refresh() {
         ports = ((try? FileManager.default.contentsOfDirectory(atPath: "/dev")) ?? [])
@@ -38,6 +46,14 @@ final class USBSerialTransport: ObservableObject {
         cfsetspeed(&attributes, speed_t(B115200))
         attributes.c_cflag |= tcflag_t(CLOCAL | CREAD)
         guard tcsetattr(fd, TCSANOW, &attributes) == 0 else { Darwin.close(fd); status = "Cannot configure USB port"; return }
+        relay(descriptor: fd, name: "Board USB", targetPort: targetPort)
+        status = "Board USB open · 115200 baud · waiting for board session"
+    }
+
+    /// Takes ownership of an open, non-blocking descriptor.
+    func relay(descriptor fd: Int32, name: String, targetPort: UInt16) {
+        stop()
+        self.name = name
         let currentGeneration = generation
         descriptor = fd
         opened = true
@@ -65,7 +81,7 @@ final class USBSerialTransport: ObservableObject {
         readSource.setCancelHandler { Darwin.close(fd) }
         readSource.resume()
         next.start()
-        status = "Board USB open · 115200 baud · waiting for board session"
+        status = "\(name) open"
     }
 
     func stop() {
@@ -80,7 +96,7 @@ final class USBSerialTransport: ObservableObject {
             descriptor = -1
         }
         pending = Data(); completion = nil
-        status = "Board USB is closed"
+        status = "\(name) is closed"
     }
 
     private func fail(_ reason: String) { stop(); status = reason; onFailure?(reason) }
@@ -89,7 +105,7 @@ final class USBSerialTransport: ObservableObject {
         var bytes = [UInt8](repeating: 0, count: 4096)
         let count = Darwin.read(fd, &bytes, bytes.count)
         if count > 0 { relay?.accept(Data(bytes.prefix(count))) }
-        else if count == 0 || (errno != EAGAIN && errno != EINTR) { fail("Board USB disconnected") }
+        else if count == 0 || (errno != EAGAIN && errno != EINTR) { fail("\(name) disconnected") }
     }
     private func flush() {
         guard descriptor >= 0 else { return }
@@ -112,7 +128,7 @@ final class USBSerialTransport: ObservableObject {
                     source.resume()
                 }
                 return
-            } else { fail("Board USB write failed"); return }
+            } else { fail("\(name) write failed"); return }
         }
         writer?.cancel(); writer = nil
         let done = completion; completion = nil; done?()
