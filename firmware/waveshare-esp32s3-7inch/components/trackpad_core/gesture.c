@@ -53,7 +53,7 @@ static void emit_click(tp_emit_t emit, void *context, tp_button_t button, int co
 tp_options_t tp_default_options(void) {
     return (tp_options_t){ .tap_to_click = true, .two_finger_tap = true, .hold_to_drag = true,
         .three_finger_drag = false, .pinch = false, .mission_control = false, .page_swipes = false,
-        .mission_fingers = 3,
+        .mission_fingers = 3, .drag_second_finger = false,
         .hold_duration = 0.45, .tap_duration = 0.28, .movement_threshold = 12.0 };
 }
 
@@ -287,6 +287,10 @@ void tp_engine_update(tp_engine_t *e, const tp_touches_t *touches, double time, 
         return;
     }
 
+    // A hold-drag that a second finger may join: two contacts then move the
+    // pointer instead of scrolling or pinching.
+    bool joinable = o->drag_second_finger && e->dragging && e->drag_contacts == 1;
+
     // Once scrolling starts, latch that gesture. Finger-spacing/angle jitter
     // during a fast flick must not cancel it or discard its momentum.
     if (touches->count == 2) {
@@ -296,7 +300,7 @@ void tp_engine_update(tp_engine_t *e, const tp_touches_t *touches, double time, 
         if (e->previous.count != 2 || !same_ids(&e->previous, touches)) {
             e->base_has = true; e->base_distance = distance; e->base_angle = angle;
         }
-        if (e->base_has && !e->scrolling && !e->suppressed) {
+        if (e->base_has && !e->scrolling && !e->suppressed && !joinable) {
             double rotation = atan2(sin(angle - e->base_angle), cos(angle - e->base_angle));
             double cx, cy, ox, oy; centroid(touches, &cx, &cy); centroid(&e->origins, &ox, &oy);
             double center_travel = hypot(cx - ox, cy - oy);
@@ -323,8 +327,9 @@ void tp_engine_update(tp_engine_t *e, const tp_touches_t *touches, double time, 
         e->base_has = false;
     }
 
-    if (e->dragging && touches->count != e->drag_contacts) {
+    if (e->dragging && touches->count != e->drag_contacts && !(joinable && touches->count == 2)) {
         emit_button(emit, context, false); e->dragging = false; e->suppressed = true;
+        joinable = false;
     }
     if (touches->count == 3 && e->previous.count == 3 && !same_ids(touches, &e->previous)) e->suppressed = true;
     // Finger removal cannot turn a system action into a click or scroll.
@@ -354,7 +359,18 @@ void tp_engine_update(tp_engine_t *e, const tp_touches_t *touches, double time, 
         return;
     }
 
-    if (!e->suppressed && touches->count == 1 && e->peak == 1) {
+    if (joinable && touches->count == 2) {
+        // Each finger that was already down adds its own travel, so the one held
+        // still contributes nothing and a finger that just landed cannot jump.
+        double dx = 0, dy = 0;
+        for (int i = 0; i < 2; i++) {
+            const tp_touch_t *before = find(&e->previous, touches->items[i].id);
+            if (before) { dx += touches->items[i].x - before->x; dy += touches->items[i].y - before->y; }
+        }
+        if (fabs(dx) <= 128 && fabs(dy) <= 128 && (dx != 0 || dy != 0)) {
+            tp_command_t move = command(TP_MOVE); move.dx = dx; move.dy = dy; emit(&move, context);
+        }
+    } else if (!e->suppressed && touches->count == 1 && (e->peak == 1 || joinable)) {
         const tp_touch_t *point = &touches->items[0];
         if (!e->anchor_has || hypot(point->x - e->anchor_x, point->y - e->anchor_y) > o->movement_threshold) {
             e->anchor_has = true; e->anchor_x = point->x; e->anchor_y = point->y; e->anchor_time = time;

@@ -1,5 +1,6 @@
-// Screen layout mirroring the iPad app: the trackpad surface on the left and a
-// one-finger-scrollable control strip that follows the Mac's front app.
+// Screen layout: a row of connection buttons across the top, the trackpad
+// surface below it on the left, and on the right a one-finger-scrollable strip
+// of buttons that follows the Mac's front app.
 #include "app.h"
 #include "board.h"
 #include "esp_lvgl_port.h"
@@ -8,17 +9,20 @@
 enum { BUTTON_ACTION = 1, BUTTON_APP, BUTTON_DESKTOP };
 #define BUTTON_ID(kind, value) ((void *)(uintptr_t)((kind) << 8 | (value)))
 
-static lv_obj_t *title, *hint, *status, *strip_title, *strip, *connect_label, *settings_panel;
-static lv_obj_t *wireless_panel;
+static lv_obj_t *title, *hint, *status, *strip_title, *strip, *settings_panel;
+static lv_obj_t *connect_button, *route_button, *route_menu;
+static int shown_bar = -1;
+static lv_obj_t *wireless_panel, *battery_label;
+static int shown_battery = -2;
+static bool shown_on_usb;
 static void refresh_wireless(void);
-static bool shown_paused;
 static bool shown_connected;
 static int shown_app = -1;
 static uint32_t shown_capabilities;
 
 static void forward(const tp_command_t *command, void *context) {
     (void)context;
-    tp_session_send(&g_session, command, app_now_ms());
+    app_send(command);
 }
 
 static void pressed(lv_event_t *event) {
@@ -140,8 +144,10 @@ static void rebuild_strip(bool connected, bool has_app, tp_app_t app, uint32_t c
             app_button(row(low), TP_SAVE, true);
         }
     }
-    button(row(88), LV_SYMBOL_HOME, "Show Desktop", BUTTON_ID(BUTTON_DESKTOP, 0),
+    lv_obj_t *last = row(low);
+    button(last, LV_SYMBOL_HOME, "Show Desktop", BUTTON_ID(BUTTON_DESKTOP, 0),
            connected && (capabilities & TP_CAP_SHOW_DESKTOP));
+    button(last, LV_SYMBOL_POWER, "Quit App", BUTTON_ID(BUTTON_ACTION, TP_QUIT), actions);
 }
 
 /// Runs in the LVGL task. Copies what it needs under the core lock, then draws.
@@ -159,20 +165,47 @@ static void refresh(lv_timer_t *timer) {
     strlcpy(text, g_status, sizeof text);
     core_unlock();
 
-    lv_label_set_text(status, text);
+    // Only worth reading while there is no session: "Connected" is in the top bar.
+    lv_label_set_text(status, connected ? "" : text);
+    core_lock();
+    app_route_t route = g_route;
+    bool paired = g_mac.valid, paused = g_paused;
+    core_unlock();
+    bool on_usb = usb_link_host_present();
     if (!connected) {
-        lv_label_set_text(title, g_paused ? "Disconnected" : "Connect to your Mac");
-        lv_label_set_text(hint, g_paused ? "Tap Connect to go back online."
-                          : "Plug the port marked USB into your Mac\nand open Smart Trackpad Companion.");
+        lv_label_set_text(title, paused ? "Disconnected" : "Connect to your Mac");
+        lv_label_set_text(hint, paused ? "Tap Disconnected to go back online."
+            : (route == ROUTE_WIFI || route == ROUTE_BLUETOOTH) && !paired
+            ? "Wi-Fi and Bluetooth need pairing first: connect by USB once\nand click \"Remember this board\" in the Mac app."
+            : "Plug the port marked USB into your Mac\nand open Smart Trackpad Companion.");
     } else {
         // The built-in font has no middle dot or ellipsis glyphs.
         lv_label_set_text(title, g_dragging ? "Dragging - lift to release"
                           : (g_hold_pending ? "Hold still to drag..." : "Slide to move - tap to click"));
         lv_label_set_text(hint, "Two fingers to scroll or right-click - hold to drag");
     }
-    if (g_paused != shown_paused || connected != shown_connected) {
-        shown_paused = g_paused;
-        lv_label_set_text(connect_label, g_paused ? LV_SYMBOL_USB "  Connect" : LV_SYMBOL_CLOSE "  Disconnect");
+    // Battery cell: charge when a cell is measured, otherwise what powers the board.
+    int battery = g_battery_percent;
+    if (battery != shown_battery || on_usb != shown_on_usb) {
+        shown_battery = battery; shown_on_usb = on_usb;
+        if (battery < 0) lv_label_set_text(battery_label, on_usb ? LV_SYMBOL_USB "  USB power" : LV_SYMBOL_CHARGE "  No battery");
+        else {
+            const char *icon = battery > 80 ? LV_SYMBOL_BATTERY_FULL : battery > 55 ? LV_SYMBOL_BATTERY_3
+                : battery > 30 ? LV_SYMBOL_BATTERY_2 : battery > 10 ? LV_SYMBOL_BATTERY_1 : LV_SYMBOL_BATTERY_EMPTY;
+            lv_label_set_text_fmt(battery_label, "%s  %d%%%s", icon, battery, on_usb ? "  " LV_SYMBOL_USB : "");
+        }
+    }
+    // Top bar: connection state, and the route, which is also the menu to change it.
+    int state = paused ? 0 : connected ? 2 : 1;
+    int bar = state | route << 2;
+    if (bar != shown_bar) {
+        shown_bar = bar;
+        static const char *const states[] = { LV_SYMBOL_CLOSE "  Disconnected", LV_SYMBOL_REFRESH "  Connecting", LV_SYMBOL_OK "  Connected" };
+        static const uint32_t state_colors[] = { 0x2a2f37, 0x6b5416, 0x1f6b3a };
+        static const char *const routes[] = { LV_SYMBOL_USB "  USB", LV_SYMBOL_WIFI "  Wi-Fi", LV_SYMBOL_BLUETOOTH "  Bluetooth" };
+        lv_label_set_text(lv_obj_get_child(connect_button, 0), states[state]);
+        lv_obj_set_style_bg_color(connect_button, lv_color_hex(state_colors[state]), 0);
+        lv_label_set_text(lv_obj_get_child(route_button, 0), routes[route]);
     }
     int shown = connected && has_app ? (int)app : -1;
     if (connected != shown_connected || shown != shown_app || capabilities != shown_capabilities) {
@@ -181,11 +214,10 @@ static void refresh(lv_timer_t *timer) {
     }
 }
 
-
 // ---- Settings ----
 
 enum { SET_NATURAL, SET_TAP, SET_TWO_FINGER, SET_HOLD, SET_THREE_DRAG, SET_MISSION, SET_PAGES, SET_PINCH, SET_COUNT };
-static lv_obj_t *switches[SET_COUNT], *speed_value[2];
+static lv_obj_t *switches[SET_COUNT], *speed_value[3];
 static app_settings_t settings_at_open;
 
 static bool *setting(int id) {
@@ -227,9 +259,12 @@ static void speed_changed(lv_event_t *event) {
     int which = (int)(uintptr_t)lv_event_get_user_data(event);
     int value = lv_slider_get_value(lv_event_get_target(event));
     core_lock();
-    if (which == 0) g_settings.sensitivity = value / 100.0; else g_settings.scroll_speed = value / 100.0;
+    if (which == 0) g_settings.sensitivity = value / 100.0;
+    else if (which == 1) g_settings.scroll_speed = value / 100.0;
+    else app_set_brightness((uint8_t)value);   // the touch task applies it
     core_unlock();
-    lv_label_set_text_fmt(speed_value[which], "%d.%02dx", value / 100, value % 100);
+    if (which == 2) lv_label_set_text_fmt(speed_value[which], "%d%%", value);
+    else lv_label_set_text_fmt(speed_value[which], "%d.%02dx", value / 100, value % 100);
 }
 
 static lv_obj_t *settings_row(lv_obj_t *parent, const char *text) {
@@ -257,17 +292,17 @@ static void add_speed(lv_obj_t *parent, const char *text, int which, double valu
     lv_obj_t *line = settings_row(parent, text);
     lv_obj_t *slider = lv_slider_create(line);
     lv_obj_set_size(slider, 190, 18);
-    lv_slider_set_range(slider, 25, 300);
-    lv_slider_set_value(slider, (int)(value * 100 + 0.5), LV_ANIM_OFF);
+    if (which == 2) lv_slider_set_range(slider, 10, 100); else lv_slider_set_range(slider, 25, 300);
+    lv_slider_set_value(slider, which == 2 ? (int)value : (int)(value * 100 + 0.5), LV_ANIM_OFF);
     lv_obj_set_ext_click_area(slider, 22);
     lv_obj_add_event_cb(slider, speed_changed, LV_EVENT_VALUE_CHANGED, (void *)(uintptr_t)which);
     speed_value[which] = lv_label_create(line);
     lv_obj_set_width(speed_value[which], 76);
     lv_obj_set_style_text_font(speed_value[which], &lv_font_montserrat_20, 0);
     int shown = (int)(value * 100 + 0.5);
-    lv_label_set_text_fmt(speed_value[which], "%d.%02dx", shown / 100, shown % 100);
+    if (which == 2) lv_label_set_text_fmt(speed_value[which], "%d%%", (int)value);
+    else lv_label_set_text_fmt(speed_value[which], "%d.%02dx", shown / 100, shown % 100);
 }
-
 
 // ---- Wireless: Wi-Fi network and the remembered Mac ----
 
@@ -281,6 +316,7 @@ static void close_wireless(lv_event_t *event) {
     wireless_panel = NULL;
     listed_networks = -1;
     g_ui_modal = false;
+    g_wifi_setup = false;
     g_ui_dirty = true;
 }
 
@@ -301,6 +337,8 @@ static void join_network(lv_event_t *event) {
 
 static void network_chosen(lv_event_t *event) {
     strlcpy(chosen_network, lv_list_get_button_text(network_list, lv_event_get_target(event)), sizeof chosen_network);
+    // A network joined before needs no typing.
+    if (wifi_link_saved(chosen_network)) { wifi_link_join(chosen_network, NULL); return; }
     lv_textarea_set_text(password_field, "");
     lv_textarea_set_placeholder_text(password_field, chosen_network);
     lv_obj_add_flag(network_list, LV_OBJ_FLAG_HIDDEN);
@@ -335,9 +373,11 @@ static lv_obj_t *small_button(lv_obj_t *parent, const char *text, lv_event_cb_t 
 
 /// Called from refresh() while the panel is open.
 static void refresh_wireless(void) {
-    char text[96];
-    wifi_link_status(text, sizeof text);
-    lv_label_set_text(wireless_status, text);
+    char wifi[96], bluetooth[96];
+    wifi_link_status(wifi, sizeof wifi);
+    ble_link_status(bluetooth, sizeof bluetooth);
+    lv_label_set_text_fmt(wireless_status, "USB: %s\nWi-Fi: %s\n%s",
+        usb_link_host_present() ? "computer detected" : "no computer detected on the USB port", wifi, bluetooth);
     core_lock();
     app_mac_t mac = g_mac;
     core_unlock();
@@ -348,14 +388,18 @@ static void refresh_wireless(void) {
     static char names[16][33];
     bool scanning;
     int count = wifi_link_networks(names, 16, &scanning);
+    static bool first_scan_done;
+    if (listed_networks == -1) first_scan_done = false;
+    if (!first_scan_done && !scanning && count == 0) { wifi_link_scan(); first_scan_done = true; }
     int shown = scanning ? -2 : count;
     if (shown == listed_networks) return;
     listed_networks = shown;
     lv_obj_clean(network_list);
     if (scanning) lv_list_add_text(network_list, "Looking for networks...");
     else if (count == 0) lv_list_add_text(network_list, "No networks found. Tap Scan.");
+    else lv_list_add_text(network_list, "Networks with a tick are remembered: tap to join without a password.");
     for (int i = 0; !scanning && i < count; i++) {
-        lv_obj_t *item = lv_list_add_button(network_list, LV_SYMBOL_WIFI, names[i]);
+        lv_obj_t *item = lv_list_add_button(network_list, wifi_link_saved(names[i]) ? LV_SYMBOL_OK : LV_SYMBOL_WIFI, names[i]);
         lv_obj_set_style_text_font(item, &lv_font_montserrat_20, 0);
         lv_obj_set_style_min_height(item, 56, 0);
         lv_obj_add_event_cb(item, network_chosen, LV_EVENT_CLICKED, NULL);
@@ -394,7 +438,12 @@ static void open_wireless(lv_event_t *event) {
     lv_obj_set_width(mac_status, lv_pct(100));
     lv_label_set_long_mode(mac_status, LV_LABEL_LONG_WRAP);
     lv_obj_set_style_text_font(mac_status, &lv_font_montserrat_20, 0);
-    forget_button = small_button(wireless_panel, "Forget Mac", forget_mac);
+    lv_obj_t *choices = lv_obj_create(wireless_panel);
+    lv_obj_remove_style_all(choices);
+    lv_obj_set_size(choices, lv_pct(100), 52);
+    lv_obj_set_flex_flow(choices, LV_FLEX_FLOW_ROW);
+    lv_obj_set_style_pad_column(choices, 16, 0);
+    forget_button = small_button(choices, "Forget Mac", forget_mac);
 
     wireless_status = lv_label_create(wireless_panel);
     lv_obj_set_style_text_font(wireless_status, &lv_font_montserrat_20, 0);
@@ -428,7 +477,7 @@ static void open_wireless(lv_event_t *event) {
     lv_obj_add_flag(keyboard, LV_OBJ_FLAG_HIDDEN);
 
     listed_networks = -1;
-    wifi_link_scan();
+    g_wifi_setup = true;   // the power task switches Wi-Fi on for this page
     refresh_wireless();
 }
 
@@ -526,7 +575,6 @@ static void open_settings(lv_event_t *event) {
     lv_obj_remove_flag(columns, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_t *left = settings_column(columns), *right = settings_column(columns);
 
-    // Five rows and two headings on each side, so both columns line up.
     heading(left, "MOVEMENT AND SCROLLING");
     add_speed(left, "Pointer speed", 0, now.sensitivity);
     add_speed(left, "Scroll speed", 1, now.scroll_speed);
@@ -534,6 +582,10 @@ static void open_settings(lv_event_t *event) {
     heading(left, "TWO AND FOUR FINGERS");
     add_switch(left, "Pinch to zoom", SET_PINCH);
     add_switch(left, "Mission Control (4 fingers)", SET_MISSION);
+    // The heading says which of the two levels this is; a longer row label
+    // would not fit beside the slider.
+    heading(left, usb_link_host_present() ? "SCREEN, ON A COMPUTER'S USB PORT" : "SCREEN, ON BATTERY");
+    add_speed(left, "Brightness", 2, app_brightness());
 
     heading(right, "CLICK AND DRAG");
     add_switch(right, "Tap to click", SET_TAP);
@@ -547,7 +599,70 @@ static void open_settings(lv_event_t *event) {
 
 static void toggle_connection(lv_event_t *event) {
     (void)event;
-    usb_link_set_paused(!g_paused);
+    app_set_paused(!g_paused);
+}
+
+static void sleep_pressed(lv_event_t *event) {
+    (void)event;
+    // Nothing may stay held on the Mac while the board sleeps.
+    core_lock();
+    tp_engine_cancel(&g_engine, forward, NULL);
+    g_dragging = false;
+    app_sleep();
+    core_unlock();
+}
+
+static void close_route_menu(lv_event_t *event) {
+    (void)event;
+    if (!route_menu) return;
+    lv_obj_delete_async(route_menu);
+    route_menu = NULL;
+    g_ui_modal = false;
+}
+
+static void route_chosen(lv_event_t *event) {
+    app_set_route((app_route_t)(uintptr_t)lv_event_get_user_data(event));
+    close_route_menu(event);
+}
+
+/// The route button: a menu of the three routes under it.
+static void open_route_menu(lv_event_t *event) {
+    (void)event;
+    if (route_menu) return;
+    // A see-through sheet over everything: a touch outside the menu closes it.
+    g_ui_modal = true;
+    route_menu = lv_obj_create(lv_layer_top());
+    lv_obj_remove_style_all(route_menu);
+    lv_obj_set_size(route_menu, BOARD_H_RES, BOARD_V_RES);
+    lv_obj_add_flag(route_menu, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(route_menu, close_route_menu, LV_EVENT_CLICKED, NULL);
+    lv_obj_t *list = lv_obj_create(route_menu);
+    lv_obj_remove_style_all(list);
+    lv_obj_set_size(list, lv_obj_get_width(route_button) + 16, 3 * 64 + 2 * 8 + 16);
+    lv_obj_set_pos(list, lv_obj_get_x(route_button) + 12 - 8, BAR_HEIGHT - 4);
+    lv_obj_set_style_bg_color(list, lv_color_hex(0x0b0d10), 0);
+    lv_obj_set_style_bg_opa(list, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(list, 18, 0);
+    lv_obj_set_style_border_color(list, lv_color_hex(0x2f6fbd), 0);
+    lv_obj_set_style_border_width(list, 2, 0);
+    lv_obj_set_style_pad_all(list, 8, 0);
+    lv_obj_set_style_pad_row(list, 8, 0);
+    lv_obj_set_flex_flow(list, LV_FLEX_FLOW_COLUMN);
+    lv_obj_remove_flag(list, LV_OBJ_FLAG_SCROLLABLE);
+    static const char *const names[] = { LV_SYMBOL_USB "  USB", LV_SYMBOL_WIFI "  Wi-Fi", LV_SYMBOL_BLUETOOTH "  Bluetooth" };
+    for (int i = 0; i < 3; i++) {
+        app_route_t route = (app_route_t)i;
+        lv_obj_t *item = lv_button_create(list);
+        lv_obj_set_size(item, lv_pct(100), 64);
+        lv_obj_set_style_radius(item, 14, 0);
+        lv_obj_set_style_shadow_width(item, 0, 0);
+        lv_obj_set_style_bg_color(item, lv_color_hex(route == g_route ? 0x2f6fbd : 0x1f3a5f), 0);
+        lv_obj_add_event_cb(item, route_chosen, LV_EVENT_CLICKED, (void *)(uintptr_t)route);
+        lv_obj_t *label = lv_label_create(item);
+        lv_label_set_text(label, names[i]);
+        lv_obj_set_style_text_font(label, &lv_font_montserrat_20, 0);
+        lv_obj_center(label);
+    }
 }
 
 static lv_obj_t *top_button(lv_obj_t *parent, const char *text, lv_event_cb_t action) {
@@ -557,12 +672,13 @@ static lv_obj_t *top_button(lv_obj_t *parent, const char *text, lv_event_cb_t ac
     lv_obj_set_style_radius(item, 14, 0);
     lv_obj_set_style_bg_color(item, lv_color_hex(0x2a2f37), 0);
     lv_obj_set_style_shadow_width(item, 0, 0);
+    lv_obj_set_style_pad_hor(item, 4, 0);
     lv_obj_add_event_cb(item, action, LV_EVENT_CLICKED, NULL);
     lv_obj_t *label = lv_label_create(item);
     lv_label_set_text(label, text);
-    lv_obj_set_style_text_font(label, &lv_font_montserrat_14, 0);
+    lv_obj_set_style_text_font(label, &lv_font_montserrat_20, 0);
     lv_obj_center(label);
-    return label;
+    return item;
 }
 
 static void read_pointer(lv_indev_t *device, lv_indev_data_t *data) {
@@ -580,8 +696,8 @@ void ui_start(void) {
     lv_obj_remove_flag(screen, LV_OBJ_FLAG_SCROLLABLE);
 
     lv_obj_t *pad = lv_obj_create(screen);
-    lv_obj_set_size(pad, PAD_WIDTH - 24, BOARD_V_RES - 24);
-    lv_obj_set_pos(pad, 12, 12);
+    lv_obj_set_size(pad, PAD_WIDTH - 24, BOARD_V_RES - BAR_HEIGHT - 12);
+    lv_obj_set_pos(pad, 12, BAR_HEIGHT);
     lv_obj_set_style_radius(pad, 24, 0);
     lv_obj_set_style_bg_color(pad, lv_color_hex(0x1c1f24), 0);
     lv_obj_set_style_border_width(pad, 0, 0);
@@ -602,23 +718,40 @@ void ui_start(void) {
     lv_obj_set_style_text_font(strip_title, &lv_font_montserrat_20, 0);
     lv_obj_set_width(strip_title, STRIP_WIDTH - 12);
     lv_obj_set_style_text_align(strip_title, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_pos(strip_title, PAD_WIDTH, 78);
+    lv_obj_set_pos(strip_title, PAD_WIDTH, BAR_HEIGHT + 4);
 
-    // Always reachable, whatever the list below shows.
-    lv_obj_t *fixed = lv_obj_create(screen);
-    lv_obj_remove_style_all(fixed);
-    lv_obj_set_size(fixed, STRIP_WIDTH - 12, 52);
-    lv_obj_set_pos(fixed, PAD_WIDTH, 12);
-    lv_obj_set_flex_flow(fixed, LV_FLEX_FLOW_ROW);
-    lv_obj_set_style_pad_column(fixed, 8, 0);
-    lv_obj_remove_flag(fixed, LV_OBJ_FLAG_SCROLLABLE);
-    top_button(fixed, LV_SYMBOL_SETTINGS "  Settings", open_settings);
-    connect_label = top_button(fixed, LV_SYMBOL_CLOSE "  Disconnect", toggle_connection);
+    // Connection controls across the whole width, so the strip stays app-specific.
+    lv_obj_t *bar = lv_obj_create(screen);
+    lv_obj_remove_style_all(bar);
+    lv_obj_set_size(bar, BOARD_H_RES - 24, BAR_HEIGHT - 16);
+    lv_obj_set_pos(bar, 12, 8);
+    lv_obj_set_flex_flow(bar, LV_FLEX_FLOW_ROW);
+    lv_obj_set_style_pad_column(bar, 8, 0);
+    lv_obj_remove_flag(bar, LV_OBJ_FLAG_SCROLLABLE);
+    connect_button = top_button(bar, "", toggle_connection);
+    route_button = top_button(bar, "", open_route_menu);
+    lv_obj_set_style_bg_color(route_button, lv_color_hex(0x1f3a5f), 0);   // it opens a menu
+    top_button(bar, LV_SYMBOL_SETTINGS "  Settings", open_settings);
+    lv_obj_t *battery = lv_obj_create(bar);
+    lv_obj_remove_style_all(battery);
+    lv_obj_set_size(battery, 150, lv_pct(100));
+    lv_obj_set_style_radius(battery, 14, 0);
+    lv_obj_set_style_bg_color(battery, lv_color_hex(0x1c1f24), 0);
+    lv_obj_set_style_bg_opa(battery, LV_OPA_COVER, 0);
+    lv_obj_remove_flag(battery, LV_OBJ_FLAG_SCROLLABLE);
+    battery_label = lv_label_create(battery);
+    lv_obj_set_style_text_font(battery_label, &lv_font_montserrat_16, 0);
+    lv_label_set_text(battery_label, "");
+    lv_obj_center(battery_label);
+    // Square, in the corner: screen off and offline until the next touch.
+    lv_obj_t *power = top_button(bar, LV_SYMBOL_POWER, sleep_pressed);
+    lv_obj_set_flex_grow(power, 0);
+    lv_obj_set_width(power, BAR_HEIGHT - 16);
 
     strip = lv_obj_create(screen);
     lv_obj_remove_style_all(strip);
-    lv_obj_set_size(strip, STRIP_WIDTH - 12, BOARD_V_RES - 116 - 8);
-    lv_obj_set_pos(strip, PAD_WIDTH, 116);
+    lv_obj_set_size(strip, STRIP_WIDTH - 12, BOARD_V_RES - BAR_HEIGHT - 36 - 8);
+    lv_obj_set_pos(strip, PAD_WIDTH, BAR_HEIGHT + 36);
     lv_obj_set_flex_flow(strip, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_style_pad_row(strip, 12, 0);
     lv_obj_set_style_pad_bottom(strip, 8, 0);

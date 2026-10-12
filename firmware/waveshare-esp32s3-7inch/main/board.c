@@ -1,6 +1,7 @@
 #include "board.h"
 #include "driver/gpio.h"
 #include "driver/i2c_master.h"
+#include "esp_attr.h"
 #include "esp_check.h"
 #include "esp_lcd_panel_ops.h"
 #include "esp_lcd_panel_rgb.h"
@@ -17,6 +18,8 @@ static const char *TAG = "board";
 #define EXIO_ADDRESS 0x24
 #define EXIO_REG_MODE 0x02
 #define EXIO_REG_OUTPUT 0x03
+#define EXIO_REG_PWM 0x05
+#define EXIO_REG_ADC 0x06
 #define EXIO_TOUCH_RESET 1
 #define EXIO_BACKLIGHT 2
 #define EXIO_LCD_RESET 3
@@ -44,6 +47,16 @@ static void exio_set(int pin, bool high) {
 
 void board_backlight(bool on) { exio_set(EXIO_BACKLIGHT, on); }
 
+/// The expander's PWM output dims the backlight driver: a higher duty is darker,
+/// and the vendor code never goes above 97 percent so the panel cannot go black.
+void board_brightness(int percent) {
+    if (percent < 5) percent = 5;
+    if (percent > 100) percent = 100;
+    int duty = 100 - percent;
+    if (duty > 97) duty = 97;
+    exio_write(EXIO_REG_PWM, (uint8_t)(duty * 255 / 100));
+}
+
 static esp_err_t gt911_read(uint16_t reg, uint8_t *data, size_t length) {
     uint8_t address[2] = { reg >> 8, reg & 0xff };
     return i2c_master_transmit_receive(gt911, address, 2, data, length, 50);
@@ -67,7 +80,9 @@ esp_lcd_panel_handle_t board_init(void) {
         },
         .data_width = 16, .bits_per_pixel = 16,
         .num_fbs = 2,
-        .bounce_buffer_size_px = BOARD_H_RES * 20,
+        // Two bounce buffers of this size come out of internal RAM, which the
+        // radios also need: 10 lines (41 KB) instead of the vendor's 20.
+        .bounce_buffer_size_px = BOARD_H_RES * 10,
         .hsync_gpio_num = GPIO_NUM_46, .vsync_gpio_num = GPIO_NUM_3, .de_gpio_num = GPIO_NUM_5,
         .pclk_gpio_num = GPIO_NUM_7, .disp_gpio_num = -1,
         // B3–B7, G2–G7, R3–R7.
@@ -108,6 +123,25 @@ esp_lcd_panel_handle_t board_init(void) {
         if (gt911_read(GT911_STATUS, &status, 1) != ESP_OK) ESP_LOGE(TAG, "GT911 touch controller not found");
     }
     return panel;
+}
+
+static void (*touch_handler)(void);
+static void IRAM_ATTR touch_isr(void *argument) { (void)argument; if (touch_handler) touch_handler(); }
+
+void board_on_touch_interrupt(void (*handler)(void)) {
+    touch_handler = handler;
+    // The GT911 pulses INT once per report; either edge will do.
+    gpio_set_intr_type(PIN_TOUCH_INT, GPIO_INTR_ANYEDGE);
+    gpio_install_isr_service(0);
+    gpio_isr_handler_add(PIN_TOUCH_INT, touch_isr, NULL);
+}
+
+/// The expander measures the cell through a 3:1 divider with a 10-bit converter
+/// referenced to 3.3 V (figures from the vendor example).
+float board_battery_volts(void) {
+    uint8_t reg = EXIO_REG_ADC, raw[2];
+    if (i2c_master_transmit_receive(exio, &reg, 1, raw, 2, 100) != ESP_OK) return 0;
+    return (float)(raw[0] | raw[1] << 8) * 3.0f * 3.3f / 1023.0f;
 }
 
 bool board_read_touches(board_touch_t touches[BOARD_MAX_TOUCHES], int *count) {

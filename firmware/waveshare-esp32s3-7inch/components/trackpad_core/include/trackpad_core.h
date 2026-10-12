@@ -20,7 +20,7 @@ typedef enum {
 } tp_kind_t;
 typedef enum { TP_BEGAN, TP_CHANGED, TP_ENDED, TP_CANCELLED } tp_phase_t;
 typedef enum { TP_LEFT, TP_RIGHT } tp_button_t;
-typedef enum { TP_COPY, TP_CUT, TP_PASTE, TP_UNDO, TP_REDO, TP_ACTION_MISSION_CONTROL } tp_action_t;
+typedef enum { TP_COPY, TP_CUT, TP_PASTE, TP_UNDO, TP_REDO, TP_ACTION_MISSION_CONTROL, TP_QUIT } tp_action_t;
 typedef enum { TP_APP_OTHER, TP_APP_VSCODE, TP_APP_TERMINAL, TP_APP_SAFARI, TP_APP_SPOTIFY, TP_APP_FINDER, TP_APP_COUNT } tp_app_t;
 typedef enum {
     TP_SAVE, TP_COMPILE, TP_DELETE, TP_DELETE_WORD, TP_ENTER, TP_NEW_TAB, TP_CLOSE_TAB, TP_PLAY_PAUSE,
@@ -61,6 +61,10 @@ typedef struct {
     /// Contacts for Mission Control: 3 as on the iPad, or 4 so that it can
     /// coexist with three-finger drag. Page swipes always use 3.
     int mission_fingers;
+    /// A hold-drag survives a second finger: either finger moves the pointer and
+    /// the button stays down until both have lifted. Off on the iPad, where a
+    /// second finger ends the drag.
+    bool drag_second_finger;
     double hold_duration, tap_duration, movement_threshold;
 } tp_options_t;
 
@@ -154,6 +158,9 @@ void tp_session_tick(tp_session_t *session, uint64_t now_ms);
 /// Drops commands the Mac did not negotiate. False if the link refused the bytes.
 bool tp_session_send(tp_session_t *session, const tp_command_t *command, uint64_t now_ms);
 void tp_session_stop(tp_session_t *session, const char *reason);
+/// The reason passed to `changed` when the Mac ended the session because it is
+/// asleep or its lid is closed. Compare by address.
+extern const char tp_mac_resting[];
 
 #ifdef __cplusplus
 }

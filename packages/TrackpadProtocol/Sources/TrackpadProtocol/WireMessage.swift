@@ -45,8 +45,12 @@ struct WireMessage: Codable, Sendable {
     var enrollment: BoardEnrollment? = nil
     /// A remembered board's proof of its key, on a wireless pairRequest.
     var boardProof: String? = nil
+    /// On a disconnect from the Mac: it is asleep or its lid is closed, so the
+    /// peer may switch its screen off until the Mac connects again.
+    var sleeping: Bool? = nil
 
     func validate() throws {
+        if sleeping != nil, type != .disconnect { throw WireError.invalidMessage }
         if let enrollment {
             guard type == .enroll, enrollment.valid else { throw WireError.invalidMessage }
         } else if type == .enroll { throw WireError.invalidMessage }

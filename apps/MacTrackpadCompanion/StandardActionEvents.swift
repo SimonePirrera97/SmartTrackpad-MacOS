@@ -12,6 +12,7 @@ enum StandardActionEvents {
         case .paste: key = CGKeyCode(kVK_ANSI_V)
         case .undo: key = CGKeyCode(kVK_ANSI_Z)
         case .redo: key = CGKeyCode(kVK_ANSI_Z); flags.insert(.maskShift)
+        case .quit: key = CGKeyCode(kVK_ANSI_Q)
         case .missionControl: return nil
         }
         return (key, flags)

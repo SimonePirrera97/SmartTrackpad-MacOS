@@ -110,6 +110,8 @@ static bool read_app_context(tp_session_t *s, const cJSON *message, bool *change
     return true;
 }
 
+const char tp_mac_resting[] = "The Mac is asleep or closed";
+
 static void handle_json(tp_session_t *s, const char *text, uint64_t now_ms) {
     cJSON *message = cJSON_Parse(text);
     const cJSON *version = cJSON_GetObjectItemCaseSensitive(message, "version");
@@ -174,7 +176,7 @@ static void handle_json(tp_session_t *s, const char *text, uint64_t now_ms) {
                 enrolled = true;
             }
         } else if (strcmp(kind, "disconnect") == 0) {
-            failure = "The Mac disconnected";
+            failure = cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(message, "sleeping")) ? tp_mac_resting : "The Mac disconnected";
         } else {
             failure = "Unexpected message from the Mac";
         }

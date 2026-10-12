@@ -11,6 +11,12 @@
 
 static const char *TAG = "usb";
 static bool port_open;   // the Mac has the serial port open (DTR)
+// The board leaves the bus while it is disconnected or told to use a radio, so
+// the port vanishes on the Mac and the companion stops opening it.
+static bool attached = true, host_at_detach;
+// The Mac opened the port while startup was trying a radio; USB becomes the
+// route within half a second and the session starts then.
+static bool begin_waiting;
 
 // macOS names the port /dev/cu.usbmodem<serial><interface>, which is how the
 // companion recognises this board without asking the user to pick a port.
@@ -31,6 +37,7 @@ static const tusb_desc_device_t device = {
 };
 
 bool usb_link_open(void) { return port_open; }
+bool usb_link_host_present(void) { return attached ? tud_ready() : host_at_detach; }
 
 bool usb_link_write(const uint8_t *bytes, size_t length) {
     if (tinyusb_cdcacm_write_queue(TINYUSB_CDC_ACM_0, bytes, length) != length) return false;
@@ -49,10 +56,10 @@ static void received(int port, cdcacm_event_t *event) {
     }
 }
 
-void usb_link_begin(void) {
-    if (!port_open || g_paused) return;
-    // The cable outranks Wi-Fi: take the session over.
-    if (g_link == LINK_WIFI) tp_session_stop(&g_session, "Switching to USB");
+/// The Mac opened the port: start a session on it. Core lock held.
+static void begin(void) {
+    begin_waiting = port_open && attached && g_route != ROUTE_USB;
+    if (!port_open || !attached || begin_waiting) return;
     if (g_session.state != TP_SESSION_IDLE) return;
     char uuid[37];
     app_new_uuid(uuid);
@@ -64,36 +71,51 @@ static void line_state(int port, cdcacm_event_t *event) {
     (void)port;
     core_lock();
     port_open = event->line_state_changed_data.dtr;
-    if (port_open) usb_link_begin();
-    else if (g_link == LINK_USB) tp_session_stop(&g_session, g_paused ? "Disconnected" : "Waiting for the Mac");
+    ESP_LOGI(TAG, "Mac %s the port (link %d)", port_open ? "opened" : "closed", g_link);
+    if (port_open) begin();
+    else {
+        begin_waiting = false;
+        if (g_link == LINK_USB) tp_session_stop(&g_session, g_paused ? "Disconnected" : "Waiting for the Mac");
+    }
     core_unlock();
 }
 
-/// Pulling the cable sends no "port closed" message, so the open flag would
-/// stay set for ever and keep Wi-Fi from taking over. The bus going quiet
-/// (suspended or unmounted) is the only sign. Core lock held.
+/// Joins or leaves the bus to match the route, and notices a pulled cable:
+/// that sends no "port closed" message, so the open flag would stay set for
+/// ever. The bus going quiet (suspended or unmounted) is the only sign. Core
+/// lock held.
 void usb_link_poll(void) {
-    if (!port_open || tud_ready()) return;
+    bool wanted = app_usb_wanted();
+    if (wanted != attached) {
+        attached = wanted;
+        if (wanted) tud_connect();
+        else {
+            host_at_detach = tud_ready();
+            port_open = false;
+            if (g_link == LINK_USB) tp_session_stop(&g_session, g_paused ? "Disconnected" : "Changing route");
+            tud_disconnect();
+        }
+        ESP_LOGI(TAG, "%s the USB bus", wanted ? "joined" : "left");
+    }
+    if (begin_waiting) begin();
+    static bool was_ready;
+    bool ready = tud_ready();
+    // Three levels: "connected" needs only a bus reset from a host, so it tells
+    // a dead cable (never connected) from a host that will not configure us.
+    static int bus_state = -1;
+    int state_now = tud_connected() | tud_mounted() << 1 | tud_suspended() << 2;
+    if (state_now != bus_state) {
+        bus_state = state_now;
+        ESP_LOGI(TAG, "bus: host seen %d, configured %d, suspended %d", tud_connected(), tud_mounted(), tud_suspended());
+    }
+    if (ready != was_ready) {
+        was_ready = ready;
+        g_ui_dirty = true;
+        ESP_LOGI(TAG, "USB bus %s", ready ? "active" : "quiet (unplugged or host asleep)");
+    }
+    if (!port_open || ready) return;
     port_open = false;
     if (g_link == LINK_USB) tp_session_stop(&g_session, "Waiting for the Mac");
-}
-
-void usb_link_set_paused(bool paused) {
-    core_lock();
-    g_paused = paused;
-    // Leaving the bus makes the port vanish on the Mac, so the companion stops
-    // opening it and stays free for an iPad. Rejoining brings it straight back.
-    if (paused) {
-        tp_session_stop(&g_session, "Disconnected");
-        snprintf(g_status, sizeof g_status, "Disconnected");
-        port_open = false;
-        tud_disconnect();
-    } else {
-        snprintf(g_status, sizeof g_status, "Waiting for the Mac");
-        tud_connect();
-    }
-    g_ui_dirty = true;
-    core_unlock();
 }
 
 void usb_link_start(void) {

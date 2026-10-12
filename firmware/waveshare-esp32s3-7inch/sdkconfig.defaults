@@ -29,7 +29,6 @@ CONFIG_LV_USE_CLIB_STRING=y
 CONFIG_LV_USE_CLIB_SPRINTF=y
 CONFIG_LV_OS_FREERTOS=y
 CONFIG_LV_DEF_REFR_PERIOD=15
-CONFIG_LV_DRAW_SW_DRAW_UNIT_CNT=2
 CONFIG_LV_FONT_MONTSERRAT_14=y
 CONFIG_LV_FONT_MONTSERRAT_16=y
 CONFIG_LV_FONT_MONTSERRAT_20=y
@@ -53,3 +52,23 @@ CONFIG_ESP32S3_INSTRUCTION_CACHE_32KB=y
 CONFIG_MBEDTLS_PSK_MODES=y
 CONFIG_MBEDTLS_KEY_EXCHANGE_PSK=y
 CONFIG_LWIP_DNS_SUPPORT_MDNS_QUERIES=y
+
+# Bluetooth LE, central role only, sharing the radio with Wi-Fi.
+CONFIG_BT_ENABLED=y
+CONFIG_BT_NIMBLE_ENABLED=y
+# The peripheral role stays compiled in although the board never advertises:
+# without it NimBLE has no GATT server, the Mac's own ATT requests after connecting
+# go unanswered, and the Mac drops the link when they time out after 30 seconds.
+CONFIG_BT_NIMBLE_MEM_ALLOC_MODE_EXTERNAL=y
+CONFIG_BT_NIMBLE_ATT_PREFERRED_MTU=247
+
+# Internal RAM is the scarce resource once the display, Wi-Fi and Bluetooth all
+# run: the Bluetooth controller needs ~70 KB of it and failed to start without
+# these. Everything that can live in PSRAM is sent there.
+CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP=y
+CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC=y
+CONFIG_SPIRAM_ALLOW_STACK_EXTERNAL_MEMORY=y
+CONFIG_ESP_WIFI_IRAM_OPT=n
+CONFIG_ESP_WIFI_RX_IRAM_OPT=n
+CONFIG_BT_NIMBLE_MAX_CONNECTIONS=1
+CONFIG_BT_CTRL_BLE_MAX_ACT=2

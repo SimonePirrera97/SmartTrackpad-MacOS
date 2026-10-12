@@ -41,7 +41,7 @@ bool tp_command_valid(const tp_command_t *c) {
         return isfinite(c->dx) && isfinite(c->dy) && fabs(c->dx) <= 2048 && fabs(c->dy) <= 2048
             && c->phase <= TP_CANCELLED && (!ending || (c->dx == 0 && c->dy == 0));
     case TP_RELEASE_ALL: case TP_STOP_MOMENTUM: case TP_SHOW_DESKTOP: return true;
-    case TP_ACTION: return c->action <= TP_ACTION_MISSION_CONTROL;
+    case TP_ACTION: return c->action <= TP_QUIT;
     case TP_MAGNIFY:
         return isfinite(c->value) && fabs(c->value) <= 0.5 && c->phase <= TP_CANCELLED
             && (c->phase == TP_CHANGED || c->value == 0);

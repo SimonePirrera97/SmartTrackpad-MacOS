@@ -1,5 +1,6 @@
 import AppKit
 import Combine
+import IOKit
 
 /// Own cleanup for the app's lifetime, independently of menu visibility.
 @MainActor
@@ -12,6 +13,8 @@ final class CompanionService: ObservableObject {
     let navigation = NativeNavigationBackend()
     private var observers: [NSObjectProtocol] = []
     private var subscriptions = Set<AnyCancellable>()
+    private var systemAsleep = false
+    private var restTimer: Timer?
 
     init() {
         connection.localCapabilities = InputKind.supportedCapabilities.filter {
@@ -82,12 +85,44 @@ final class CompanionService: ObservableObject {
             object: nil, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated { self?.releaseInput() }
             })
-        for name in [NSWorkspace.willSleepNotification, NSWorkspace.sessionDidResignActiveNotification] {
+        observers.append(NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.sessionDidResignActiveNotification,
+            object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.releaseInput() }
+            })
+        for (name, asleep) in [(NSWorkspace.willSleepNotification, true), (NSWorkspace.didWakeNotification, false)] {
             observers.append(NSWorkspace.shared.notificationCenter.addObserver(forName: name,
                 object: nil, queue: .main) { [weak self] _ in
-                    MainActor.assumeIsolated { self?.releaseInput() }
+                    MainActor.assumeIsolated { self?.systemAsleep = asleep; self?.updateResting() }
                 })
         }
+        // A closed lid does not always mean sleep (an app may keep the Mac awake),
+        // and it raises no notification, so it is looked at once a second.
+        restTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.updateResting() }
+        }
+    }
+
+    /// Nobody can be looking at this Mac: it sleeps, or the lid is closed and no
+    /// other display is attached. Working with the lid closed on an external
+    /// display does not count.
+    private func updateResting() {
+        connection.setResting(systemAsleep || (Self.lidClosed && !Self.externalDisplay))
+        if systemAsleep { pointer.releaseAll() }
+    }
+
+    private static var lidClosed: Bool {
+        let root = IOServiceGetMatchingService(kIOMainPortDefault, IOServiceMatching("IOPMrootDomain"))
+        guard root != 0 else { return false }
+        defer { IOObjectRelease(root) }
+        return IORegistryEntryCreateCFProperty(root, "AppleClamshellState" as CFString, kCFAllocatorDefault, 0)?
+            .takeRetainedValue() as? Bool ?? false
+    }
+
+    private static var externalDisplay: Bool {
+        var displays = [CGDirectDisplayID](repeating: 0, count: 16)
+        var count: UInt32 = 0
+        guard CGGetOnlineDisplayList(16, &displays, &count) == .success else { return false }
+        return displays.prefix(Int(count)).contains { CGDisplayIsBuiltin($0) == 0 }
     }
 
     private func releaseInput() {

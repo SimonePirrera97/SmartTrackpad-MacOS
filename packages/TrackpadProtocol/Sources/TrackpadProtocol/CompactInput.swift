@@ -12,7 +12,7 @@ struct CompactInputPacket: Sendable {
 
     private static let kinds: [InputKind] = [.move, .click, .button, .scroll, .releaseAll, .stopMomentum, .action, .magnify, .pageSwipe, .missionControl, .showDesktop, .appControl]
     private static let phases: [ScrollPhase] = [.began, .changed, .ended, .cancelled]
-    private static let actions: [StandardAction] = [.copy, .cut, .paste, .undo, .redo, .missionControl]
+    private static let actions: [StandardAction] = [.copy, .cut, .paste, .undo, .redo, .missionControl, .quit]
     private static let apps: [ControlApp] = [.other, .vscode, .terminal, .safari, .spotify, .finder]
     private static let appActions: [AppControlAction] = [.save, .compile, .delete, .deleteWord, .enter, .newTab, .closeTab, .playPause, .previousTrack, .nextTrack, .volumeDown, .volumeUp, .newFolder, .trash]
 

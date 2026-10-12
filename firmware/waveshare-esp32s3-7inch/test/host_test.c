@@ -163,11 +163,59 @@ static void pinch_and_balance(void) {
     }
     CHECK(presses == 1 && releases == 1 && moves >= 3, "three-finger drag: %d presses %d releases %d moves", presses, releases, moves);
 
+    // Board option: a second finger joins a hold-drag instead of ending it.
+    for (int join = 0; join < 2; join++) {
+        tp_engine_init(&engine);
+        engine.options.pinch = true;
+        engine.options.drag_second_finger = join;
+        out.count = 0;
+        double t = 2;
+        tp_touches_t one = { 1, { { 1, 300, 300 } } }, two = { 2, { { 1, 300, 300 }, { 2, 500, 300 } } };
+        tp_engine_update(&engine, &one, t, collect, &out);
+        tp_engine_update(&engine, &one, t += 0.5, collect, &out);              // held long enough: button down
+        tp_engine_update(&engine, &two, t += 0.02, collect, &out);             // second finger lands
+        for (int step = 1; step <= 5; step++) {                                // and slides while the first holds
+            two.items[1].x = 500 + step * 20;
+            tp_engine_update(&engine, &two, t += 0.02, collect, &out);
+        }
+        tp_touches_t second = { 1, { { 2, 600, 300 } } };                      // the holding finger lifts
+        tp_engine_update(&engine, &second, t += 0.02, collect, &out);
+        second.items[0].y = 330;
+        tp_engine_update(&engine, &second, t += 0.02, collect, &out);
+        int down = 0, up = 0, up_at = -1; double x = 0, y = 0;
+        for (int i = 0; i < out.count; i++) {
+            const tp_command_t *c = &out.items[i];
+            if (c->kind == TP_BUTTON) { if (c->pressed) down++; else { up++; up_at = i; } }
+            if (c->kind == TP_MOVE && down == 1 && up == 0) { x += c->dx; y += c->dy; }
+            CHECK(c->kind != TP_SCROLL && c->kind != TP_MAGNIFY && c->kind != TP_CLICK, "second finger on a drag produced kind %d", c->kind);
+        }
+        if (join) CHECK(down == 1 && up == 0 && x == 100 && y == 30, "joined drag: %d down %d up, moved %f %f", down, up, x, y);
+        else CHECK(down == 1 && up == 1 && x == 0 && y == 0, "plain drag: %d down %d up, moved %f %f", down, up, x, y);
+        int before = out.count;
+        tp_engine_update(&engine, &none, t += 0.02, collect, &out);            // last finger lifts
+        for (int i = before; i < out.count; i++) if (out.items[i].kind == TP_BUTTON && !out.items[i].pressed) { up++; up_at = i; }
+        CHECK(up == 1 && up_at >= 0, "drag released %d times", up);
+        for (int i = before; i < out.count; i++) CHECK(out.items[i].kind != TP_CLICK, "lifting after a drag clicked");
+        // A third finger ends the joined drag.
+        if (join) {
+            out.count = 0;
+            tp_engine_update(&engine, &one, t += 1, collect, &out);
+            tp_engine_update(&engine, &one, t += 0.5, collect, &out);
+            tp_engine_update(&engine, &two, t += 0.02, collect, &out);
+            tp_touches_t triple = { 3, { { 1, 300, 300 }, { 2, 500, 300 }, { 3, 600, 300 } } };
+            tp_engine_update(&engine, &triple, t += 0.02, collect, &out);
+            tp_engine_update(&engine, &none, t += 0.02, collect, &out);
+            int balance = 0;
+            for (int i = 0; i < out.count; i++) if (out.items[i].kind == TP_BUTTON) balance += out.items[i].pressed ? 1 : -1;
+            CHECK(balance == 0, "third finger left the button held");
+        }
+    }
+
     // Hostile contact churn: every press must be released, every gesture closed.
     for (int variant = 0; variant < 2; variant++) {
     tp_engine_init(&engine);
     engine.options.pinch = engine.options.mission_control = engine.options.page_swipes = true;
-    if (variant == 1) { engine.options.three_finger_drag = true; engine.options.mission_fingers = 4; }
+    if (variant == 1) { engine.options.three_finger_drag = true; engine.options.mission_fingers = 4; engine.options.drag_second_finger = true; }
     uint64_t seed = 42; int held = 0, scrolling = 0, pinching = 0, navigating = 0;
     for (int frame = 0; frame <= 20000; frame++) {
         seed = seed * 6364136223846793005ULL + 1;
@@ -265,6 +313,12 @@ int main(void) {
     tp_session_tick(&session, 5000 + 60001);
     CHECK(session.state == TP_SESSION_IDLE && strstr(link.reason, "timed out"), "approval timeout");
 
-    printf("PASS: board core — golden tap/drag/scroll/Mission Control/page-swipe traces, pinch, four-finger Mission Control beside three-finger drag, 40,000 contact-churn frames with balanced cleanup, compact encoding, scroll splitting, cable and pairing handshakes, heartbeat, app context, replay rejection and timeout\n");
+    // A Mac that sleeps or closes its lid says so when it ends the session.
+    tp_session_start(&session, "33333333-3333-4333-8333-333333333333", NULL, NULL, 2000);
+    const char *resting = "{\"version\":2,\"session\":\"33333333-3333-4333-8333-333333333333\",\"sequence\":1,\"timestampMilliseconds\":5,\"type\":\"disconnect\",\"sleeping\":true}\n";
+    tp_session_receive(&session, (const uint8_t *)resting, strlen(resting), 2010);
+    CHECK(session.state == TP_SESSION_IDLE && strcmp(link.reason, tp_mac_resting) == 0, "resting disconnect: %s", link.reason);
+
+    printf("PASS: board core — golden tap/drag/scroll/Mission Control/page-swipe traces, pinch, four-finger Mission Control beside three-finger drag, second finger joining a hold-drag, 40,000 contact-churn frames with balanced cleanup, compact encoding, scroll splitting, cable and pairing handshakes, heartbeat, app context, replay rejection and timeout\n");
     return 0;
 }

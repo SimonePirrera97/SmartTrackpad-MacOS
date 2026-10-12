@@ -2,7 +2,7 @@ import Foundation
 
 enum MouseButton: String, Codable, Sendable { case left, right }
 enum StandardAction: String, Codable, Sendable, CaseIterable {
-    case copy, cut, paste, undo, redo, missionControl
+    case copy, cut, paste, undo, redo, missionControl, quit
 }
 enum InputKind: String, Codable, Sendable { case move, click, button, scroll, releaseAll, stopMomentum, action, magnify, pageSwipe, missionControl, showDesktop, appControl }
 extension InputKind {

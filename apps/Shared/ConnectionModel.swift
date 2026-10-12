@@ -1,6 +1,7 @@
 import Foundation
 import Network
 import Combine
+import OSLog
 
 /// Apple transport adapter. Wire messages contain no Apple UI or Network types.
 @MainActor
@@ -94,6 +95,9 @@ final class ConnectionModel: ObservableObject {
     private var cableMonitor: Task<Void, Never>?
     /// Set when the Mac user ends a cable session, so it is not reopened at once.
     private var cableHeld = false
+    private var resting = false
+    private static let restingReason = "Mac asleep or lid closed · reconnects when it is back"
+    private let log = Logger(subsystem: "SmartTrackpad", category: "connection")
     #if TRACKPAD_TESTING
     private var testCableDisabled = false
     #endif
@@ -202,7 +206,7 @@ final class ConnectionModel: ObservableObject {
         updateNetworkActivity()
         cableMonitor = Task { [weak self] in
             while !Task.isCancelled {
-                if let self, !self.active {
+                if let self, !self.active, !self.resting {
                     // Port 0 never answers: while held, only watch for the unplug.
                     let port = self.cableHeld ? 0 : Self.cablePort
                     let probe = await Task.detached { USBMux.probe(port: port) }.value
@@ -216,6 +220,7 @@ final class ConnectionModel: ObservableObject {
                         if self.cableHeld {
                             self.cableStatus = "Cable session ended · unplug and replug the board to reconnect"
                         } else if !self.boardUSB.opened {
+                            self.log.notice("opening board USB port \(board!, privacy: .public)")
                             self.cableStatus = "Smart Trackpad board on USB · connecting"
                             self.openBoardUSB(path: board!)
                         }
@@ -608,6 +613,7 @@ final class ConnectionModel: ObservableObject {
         case .pairRequest, .sessionRequest:
             guard (message.type == .sessionRequest) == directCableSession,
                   role == .server, !connected, !awaitingApproval else { throw WireError.invalidMessage }
+            if resting { endForRest(); return }
             pairingCode = message.code ?? ""
             peerCapabilities = Set(message.capabilities!)
             let offersEnrollment = peerCapabilities.contains(BoardKeyStore.capability)
@@ -632,6 +638,10 @@ final class ConnectionModel: ObservableObject {
                 pairingCode = ""
                 connected = true
                 boardSession = true
+                // The board has moved on to wireless, so an earlier "disconnect
+                // from the cable" no longer applies when it is switched back to USB.
+                cableHeld = false
+                log.notice("remembered board connected over \(self.activeTransport.title, privacy: .public)")
                 send(.pairAccept)
                 status = "Connected to board · \(activeTransport.title)"
             } else {
@@ -753,7 +763,7 @@ final class ConnectionModel: ObservableObject {
         maximumSendMilliseconds = max(maximumSendMilliseconds, (ProcessInfo.processInfo.systemUptime - inputSendStarted) * 1000)
     }
 
-    private func send(_ type: MessageKind, code: String? = nil, input: InputCommand? = nil, closeAfter: String? = nil, acknowledgedInput: UInt64? = nil, enrollment: BoardEnrollment? = nil) {
+    private func send(_ type: MessageKind, code: String? = nil, input: InputCommand? = nil, closeAfter: String? = nil, acknowledgedInput: UInt64? = nil, enrollment: BoardEnrollment? = nil, sleeping: Bool = false) {
         guard let peer = connection, !session.isEmpty else { return }
         sent += 1
         var message = WireMessage(version: WireMessage.currentVersion, session: session, sequence: sent,
@@ -761,6 +771,7 @@ final class ConnectionModel: ObservableObject {
         message.input = input
         message.acknowledgedInputSequence = acknowledgedInput
         message.enrollment = enrollment
+        if sleeping { message.sleeping = true }
         if type == .pairRequest || type == .sessionRequest {
             message.capabilities = localCapabilities.filter {
                 $0 != InputAcknowledgmentWindow.capability || (requestsInputWindow && localCapabilities.contains(CompactInputPacket.capability))
@@ -797,8 +808,34 @@ final class ConnectionModel: ObservableObject {
         }
     }
 
+    /// Mac: asleep, or the lid is closed with no other display. The session ends
+    /// with a note that lets a board darken its screen, and no cable or wireless
+    /// session is accepted until this is cleared.
+    func setResting(_ resting: Bool) {
+        guard role == .server, resting != self.resting else { return }
+        self.resting = resting
+        log.notice("Mac \(resting ? "resting: sessions paused" : "in use again", privacy: .public)")
+        guard resting, active else { return }
+        onResetInput?()
+        if connected { endForRest() } else { disconnect(reason: Self.restingReason) }
+    }
+
+    /// Says "sleeping" and then closes. The close waits a moment: a cable or
+    /// Bluetooth session is relayed through a loopback socket, and closing at
+    /// once would tear the relay down before it has passed the message on.
+    private func endForRest() {
+        send(.disconnect, sleeping: true)
+        let ending = connection
+        Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(400))
+            guard let self, let ending, self.connection === ending else { return }
+            self.disconnect(reason: Self.restingReason)
+        }
+    }
+
     func disconnect(reason: String? = nil) {
         lastDisconnectReason = reason ?? "Local disconnect"
+        if active { log.notice("session ended: \(self.lastDisconnectReason, privacy: .public)") }
         if role == .server, directCableSession, reason == nil { cableHeld = true }
         publishCounts()
         maintenance?.cancel()
