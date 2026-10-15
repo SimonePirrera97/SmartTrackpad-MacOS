@@ -12,6 +12,14 @@ second finger joining a hold-drag, and the screen going dark when the Mac's lid 
 row, Bluetooth fallback at startup, returning to USB by hand, Bluetooth beyond 30 s,
 battery level with a real cell. The user is trying the board on USB for some days.
 
+**Update, 2026-10-13:** power-button screen-off and touch wake confirmed after a
+backlight-control repair. Idle wake and Mac sleep/lid wake still need regression checks.
+
+**Candidate update, 2026-10-15:** true deep sleep, double-tap slide dragging and the
+VS Code Save/Delete row are implemented; build/flash evidence is recorded in
+`docs/developer-notes.md`. Sleep current, overnight endurance and physical wake/drag
+acceptance remain pending.
+
 ## What exists
 
 | Part | File |
@@ -46,8 +54,8 @@ else, that is a bug, not a variant.
   is not saved.
 - **Power button:** the square in the top right corner. A tap ends the session, switches
   the backlight off, both radios off and takes the board off the USB bus. The next touch
-  anywhere wakes the board and does nothing else: it reaches neither the pad nor a
-  button. The board comes back online, or stays disconnected if it was before.
+  anywhere restarts the board after deep sleep and does nothing else: it reaches
+  neither the pad nor a button. The chosen route and prior offline state are restored.
 - **Settings:** one page, two columns, no scrolling. Holds the gesture switches, the two
   speeds, brightness and the button to the Wireless page. Brightness is the row
   "Brightness" under a heading that says which level it is ("SCREEN, ON A COMPUTER'S USB
@@ -59,7 +67,7 @@ else, that is a bug, not a variant.
 - **Battery cell:** percentage and icon, with a USB mark while a computer is on the USB port.
 - **Pad:** hints in the middle. The status line under them is shown only while there is
   no session ("Waiting for the Mac", why a route was lost); while connected it is empty.
-- **App strip:** title of the Mac's front app and its buttons, in the iPad's order; Show
+- **App strip:** title of the Mac's front app and its buttons, in the iPad's order (VS Code: Copy/Cut, Paste, Save/Delete, Undo/Redo; no Compile); Show
   Desktop and Quit App (Cmd+Q to the front app, board only) side by side last. Buttons are disabled while there is no session.
 - Opening Settings, the Wireless page or the route menu releases everything held on the
   Mac, and every touch then belongs to the screen, none to the pad.
@@ -85,16 +93,15 @@ else, that is a bug, not a variant.
 
 - Two brightness levels are kept: on a computer's USB port (default 100 %) and otherwise
   (default 10 %). The slider changes the one in effect and its heading says which.
-- **Follows the Mac.** When the Mac goes to sleep, or its lid is closed with no other
-  display attached, the companion ends the session with `disconnect` carrying
-  `"sleeping": true` and accepts no session until it is in use again. The board switches
-  the backlight off on that message (`tp_mac_resting`, `g_host_asleep`) and on again when
-  the next session connects. A touch in between lights the screen as after any pause.
-  Lid closed while working on an external display changes nothing. Works on every
-  route; on Wi-Fi and Bluetooth the board keeps asking the Mac meanwhile. A first
-  version that watched the USB bus being suspended failed on the user's Mac (an app
-  keeps it awake with the lid closed, so the bus never suspends) and was removed.
-  Built and flashed 2026-10-12, not yet confirmed by the user.
+- **Follows the Mac (2026-10-15 update).** When the Mac sleeps or its lid is
+  closed with no external display, the companion sends `disconnect` with
+  `"sleeping": true`. The board now enters the same offline/deep-sleep path as
+  Power, on every route, after fingers lift and two seconds of settling. Touch
+  is required to wake it; reopening the Mac alone cannot wake a deeply sleeping
+  board. Closing the lid while using an external display changes nothing.
+  This replaces the earlier screen-only/automatic-reconnect behavior. USB lid
+  close, remaining asleep after reopening, then touch wake/reconnect passed the
+  joint test on 2026-10-15. Wireless regressions remain pending.
 - Dim to 15 % after 30 s without a touch, backlight off after 5 min. The touch that
   wakes the screen from this is handled normally (unlike the wake from the power button).
 - A finger whose reports stop for 250 ms without a lift counts as lifted.
@@ -105,8 +112,12 @@ Same engine and defaults as the iPad, with one deliberate difference: three-fing
 is on, Mission Control uses four fingers, and page swipes (three fingers, exclusive with
 three-finger drag) start off.
 
-Second difference (user request, 2026-10-12): **a second finger can join a hold-drag.**
-Once holding one finger has pressed the button, a second finger landing on the pad does
+Second difference (updated 2026-10-15): **tap, then slide on the second touch to drag.**
+The second touch must start within 350 ms and 30 gesture units of the first tap;
+movement past the tap tolerance presses the mouse button before sending motion.
+Stationary double/triple taps keep their click counts. Hold-to-drag is replaced on
+the board; its saved switch now controls Double-tap drag. The iPad gesture is unchanged.
+**A second finger can join an active drag.** Once the button is pressed, a second finger landing on the pad does
 not end the drag. Each finger moves the pointer by its own travel, so one can hold still
 while the other slides, lifts, lands again and slides further. Either finger may lift;
 the button is released when both have lifted, or when a third finger lands. Two fingers
@@ -161,18 +172,36 @@ consecutive pointer moves and scroll steps while the route is busy.
   while Bluetooth is the route. The Wireless page forces Wi-Fi on while it is open, so
   networks can be listed. "Off" for Bluetooth means no scanning and no connection; the
   controller stays initialised.
-- **Sleep.** The power button sets `g_asleep` and goes offline exactly like Disconnect
-  (`app_sleep`). The touch task switches the backlight off, swallows every touch while
-  asleep and calls `app_wake` on the first new one. The processor, the panel refresh and
-  the Bluetooth controller keep running: this saves the backlight, the radios and USB,
-  not everything. Not measured yet.
+- **Sleep (2026-10-15 candidate).** Power first ends the session and goes offline.
+  After all fingers lift and a two-second settling interval, the touch task arms
+  RTC EXT1 on GT911 INT (GPIO4), disables backlight and LCD power (EXIO6), then enters
+  ESP32 deep sleep. CPU, RGB refresh and radio execution stop. The GT911, expander,
+  regulators and other board circuitry still consume power; endurance is unmeasured.
+  A touch restarts the firmware and restores the chosen route and previous offline
+  state from RTC memory. Its first contact is swallowed. No timer wake is scheduled.
+  LCD shutdown is followed by draining zero-contact reports and waiting for quiet
+  INT before arming a floating RTC input. Active IRQ or I2C failures defer entry.
+  An initial version woke immediately in the lid test; the repaired USB lid
+  test now passes, staying asleep until touch. Battery endurance is unmeasured.
+  Five idle minutes also triggers this on wireless routes or without a computer on
+  USB. Normal USB stays online until a Mac sleep notification or Power press.
+  Deep sleep requires touch to wake; it cannot receive a Mac wake message.
 - **Backlight.** `brightness` applies on a computer's USB port, `brightness_battery`
   (default 10 %) otherwise; the slider edits whichever is in effect. Dim to 15 % after
   30 s idle, backlight off after 5 min, restored by any touch.
 - **Battery.** The expander's ADC (register 0x06, 10-bit, 3.3 V reference, 3:1 divider)
-  is read every 5 s and mapped through a rough lithium curve. **With no battery fitted
+  is read at startup, then once a minute, and mapped through a rough lithium curve. **With no battery fitted
   it reads about 4.1–4.3 V, so the screen shows 93–100 %**: a missing cell cannot be told
   from a full one yet. Calibrate against a real cell and a multimeter.
+  Failed ADC reads leave the last estimate unchanged; before any valid reading the
+  display says "Battery unknown" (or "Battery ?" with a USB mark if a host is present).
+  Readings above 4.35 V show 100% by user preference (including USB-only use);
+  readings below 2.5 V show unknown. Neither identifies whether a battery is fitted.
+  Charging is handled by the board's CS8501, independently of firmware. Waveshare
+  specifies 580 mA with the stock R45. Its CHRG/STDBY signals drive LEDs, not ESP32
+  inputs, so USB presence and voltage alone cannot establish charging/full status.
+  See the [vendor documentation](https://www.waveshare.com/wiki/ESP32-S3-Touch-LCD-7B)
+  and [schematic](https://files.waveshare.com/wiki/ESP32-S3-Touch-LCD-7B/ESP32-S3-Touch-LCD-7B-Schematic.pdf).
 - **Touch.** The GT911's INT line (GPIO 4, either edge) wakes the touch task; timeouts of
   5 ms with a finger down and 40 ms idle are the fallback. The task logs report and
   interrupt counts every 2000 reports: if interrupts stay at 0 the line is not working

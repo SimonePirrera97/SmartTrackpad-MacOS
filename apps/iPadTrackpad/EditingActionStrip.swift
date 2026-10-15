@@ -8,14 +8,14 @@ struct EditingActionStrip: View {
     var performApp: (AppControlRequest) -> Void = { _ in }
     let perform: (StandardAction) -> Void
     private var hasAdditionalButtons: Bool {
-        context?.app == .vscode || context?.app == .safari
+        context?.app == .safari
     }
 
     var body: some View {
         VStack(spacing: 12) {
             Text(context?.name ?? "Editing").font(.headline)
             GeometryReader { geometry in
-                let rowUnits = context?.app == .safari ? 3.8 : 2.8
+                let rowUnits = context?.app == .safari || context?.app == .vscode ? 3.8 : 2.8
                 let reservedHeight: CGFloat = hasAdditionalButtons ? (context?.app == .safari ? 36 : 24) : 104
                 let rowHeight = max(90, (geometry.size.height - reservedHeight) / rowUnits)
                 ScrollViewReader { scroll in
@@ -81,6 +81,12 @@ struct EditingActionStrip: View {
                     HStack(spacing: 8) {
                         controlButton("New Tab", symbol: "plus.square") { performApp(context.request(.newTab)) }
                         controlButton("Close Tab", symbol: "xmark.square") { performApp(context.request(.closeTab)) }
+                    }.frame(height: rowHeight)
+                }
+                if let context, context.app == .vscode {
+                    HStack(spacing: 8) {
+                        controlButton("Save", symbol: "square.and.arrow.down") { performApp(context.request(.save)) }
+                        controlButton("Delete", symbol: "delete.left") { performApp(context.request(.delete)) }
                     }.frame(height: rowHeight)
                 }
                 HStack(spacing: 8) {

@@ -16,7 +16,7 @@ const char *const tp_app_action_labels[TP_APP_ACTION_COUNT] = {
 
 static bool app_accepts(tp_app_t app, tp_app_action_t action) {
     switch (app) {
-    case TP_APP_VSCODE: return action == TP_SAVE || action == TP_COMPILE || action == TP_DELETE;
+    case TP_APP_VSCODE: return action == TP_SAVE || action == TP_DELETE;
     case TP_APP_TERMINAL: return action == TP_DELETE_WORD || action == TP_ENTER;
     case TP_APP_SAFARI: return action == TP_SAVE || action == TP_NEW_TAB || action == TP_CLOSE_TAB;
     case TP_APP_SPOTIFY: return action >= TP_PLAY_PAUSE && action <= TP_VOLUME_UP;

@@ -3,6 +3,7 @@
 #include <string.h>
 #include "board.h"
 #include "esp_log.h"
+#include "esp_sleep.h"
 #include "esp_lvgl_port.h"
 #include "esp_random.h"
 #include "esp_timer.h"
@@ -22,7 +23,6 @@ app_settings_t g_settings = {
 };
 volatile bool g_ui_dirty = true, g_dragging, g_hold_pending, g_ui_modal, g_paused, g_asleep, g_host_asleep;
 char g_status[96];
-volatile ui_pointer_t g_ui_pointer;
 volatile app_link_t g_link;
 app_mac_t g_mac;
 volatile app_route_t g_route = ROUTE_USB;
@@ -39,7 +39,8 @@ void app_apply_capabilities(void) {
     tp_options_t *o = &g_engine.options;
     o->tap_to_click = g_settings.tap_to_click;
     o->two_finger_tap = g_settings.two_finger_tap;
-    o->hold_to_drag = g_settings.hold_to_drag;
+    o->hold_to_drag = false;
+    o->tap_to_drag = g_settings.hold_to_drag;
     o->three_finger_drag = g_settings.three_finger_drag;
     o->mission_fingers = 4;
     o->drag_second_finger = true;
@@ -116,9 +117,25 @@ void app_set_paused(bool paused) {
 }
 
 static bool paused_before_sleep;
+// Deep sleep boots the firmware again; retain only the user's connection choice.
+static RTC_DATA_ATTR uint32_t sleep_marker;
+static RTC_DATA_ATTR app_route_t sleep_route;
+static RTC_DATA_ATTR bool sleep_paused;
+static bool woke_from_sleep;
+bool app_woke_from_sleep(void) { return woke_from_sleep; }
+
+void app_enter_deep_sleep(void) {
+    if (!g_asleep || !board_prepare_deep_sleep()) return;
+    sleep_route = g_route;
+    sleep_paused = paused_before_sleep;
+    sleep_marker = 0x54505331;
+    esp_deep_sleep_start();
+}
+
 
 void app_sleep(void) {
     core_lock();
+    if (g_asleep) { core_unlock(); return; }
     paused_before_sleep = g_paused;
     g_asleep = true;   // the touch task switches the backlight off
     app_set_paused(true);
@@ -269,12 +286,24 @@ static void power_task(void *unused) {
         // The Wireless page needs Wi-Fi to list and join networks, whatever the route.
         wifi_link_power(wifi || g_wifi_setup);
 
-        // Battery, every five seconds, smoothed because the reading is noisy.
-        if (++ticks % 10 == 1) {
+        // Battery at startup, then once a minute (120 half-second ticks).
+        if (++ticks % 120 == 1) {
             float volts = board_battery_volts();
-            smoothed = smoothed == 0 ? volts : smoothed * 0.8f + volts * 0.2f;
-            int percent = smoothed < 2.5f ? -1 : battery_percent(smoothed);
-            if (ticks == 1 || ticks % 120 == 1) ESP_LOGI("power", "battery reading %.2f V (%d%%)", (double)volts, percent);
+            // Zero is an I2C read failure, not a discharged or absent cell.
+            if (volts <= 0) continue;
+            int percent = -1;
+            if (volts > 4.35f) {
+                // User preference: USB-only readings above the cell range
+                // display 100%. This is not battery-presence detection.
+                smoothed = 0;
+                percent = 100;
+            } else if (volts < 2.5f) {
+                smoothed = 0;
+            } else {
+                smoothed = smoothed == 0 ? volts : smoothed * 0.8f + volts * 0.2f;
+                percent = battery_percent(smoothed);
+            }
+            ESP_LOGI("power", "battery reading %.2f V (%d%%)", (double)volts, percent);
             if (percent != g_battery_percent) g_ui_dirty = true;
             g_battery_percent = percent;
         }
@@ -319,6 +348,14 @@ void app_main(void) {
     core_mutex = xSemaphoreCreateRecursiveMutex();
     tp_engine_init(&g_engine);
     load_settings();
+    woke_from_sleep = esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_EXT1 && sleep_marker == 0x54505331;
+    if (woke_from_sleep) {
+        g_route = sleep_route;
+        g_paused = sleep_paused;
+        route_settled = true;
+        ESP_LOGI("power", "touch wake: restoring route %d, offline %d", g_route, g_paused);
+    }
+    sleep_marker = 0;
     app_apply_capabilities();
     esp_lcd_panel_handle_t panel = board_init();
 
@@ -343,8 +380,7 @@ void app_main(void) {
     xTaskCreate(power_task, "power", 4096, NULL, 4, NULL);
 
     ui_start();
-    board_brightness(app_brightness());
-    board_backlight(true);
+    board_screen(true, app_brightness());
     secure_link_init();
     usb_link_start();
     // Bluetooth first: its controller needs internal RAM, Wi-Fi can use PSRAM.

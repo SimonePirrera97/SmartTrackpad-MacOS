@@ -2,11 +2,15 @@
 #include "driver/gpio.h"
 #include "driver/i2c_master.h"
 #include "esp_attr.h"
+#include "esp_sleep.h"
+#include "esp_timer.h"
+#include "driver/rtc_io.h"
 #include "esp_check.h"
 #include "esp_lcd_panel_ops.h"
 #include "esp_lcd_panel_rgb.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/semphr.h"
 
 static const char *TAG = "board";
 
@@ -21,7 +25,7 @@ static const char *TAG = "board";
 #define EXIO_REG_PWM 0x05
 #define EXIO_REG_ADC 0x06
 #define EXIO_TOUCH_RESET 1
-#define EXIO_BACKLIGHT 2
+#define EXIO_BACKLIGHT 2   // DISP also feeds the backlight driver's enable
 #define EXIO_LCD_RESET 3
 #define EXIO_SD_CS 4
 #define EXIO_USB_SELECT 5   // low = native USB on GPIO19/20, high = CAN
@@ -33,11 +37,18 @@ static const char *TAG = "board";
 static i2c_master_bus_handle_t bus;
 static i2c_master_dev_handle_t exio, gt911;
 static uint8_t outputs;
+static SemaphoreHandle_t exio_mutex;
 
-static void exio_write(uint8_t reg, uint8_t value) {
+static bool exio_write(uint8_t reg, uint8_t value) {
     uint8_t data[2] = { reg, value };
+    xSemaphoreTake(exio_mutex, portMAX_DELAY);
     esp_err_t result = i2c_master_transmit(exio, data, 2, 100);
+    // This expander is a microcontroller. An ACK need not mean it has applied
+    // its command yet; do not immediately replace it with a second command.
+    vTaskDelay(pdMS_TO_TICKS(10));
+    xSemaphoreGive(exio_mutex);
     if (result != ESP_OK) ESP_LOGE(TAG, "IO extension write failed: %s", esp_err_to_name(result));
+    return result == ESP_OK;
 }
 
 static void exio_set(int pin, bool high) {
@@ -45,16 +56,16 @@ static void exio_set(int pin, bool high) {
     exio_write(EXIO_REG_OUTPUT, outputs);
 }
 
-void board_backlight(bool on) { exio_set(EXIO_BACKLIGHT, on); }
-
-/// The expander's PWM output dims the backlight driver: a higher duty is darker,
-/// and the vendor code never goes above 97 percent so the panel cannot go black.
-void board_brightness(int percent) {
+bool board_screen(bool on, int percent) {
+    // Vendor GPIO on/off path; PWM routing varies with fitted resistors.
+    // Restore brightness FIRST, then enable. Never use the undocumented
+    // full-duty PWM endpoint to switch off the screen.
     if (percent < 5) percent = 5;
     if (percent > 100) percent = 100;
-    int duty = 100 - percent;
-    if (duty > 97) duty = 97;
-    exio_write(EXIO_REG_PWM, (uint8_t)(duty * 255 / 100));
+    if (on && !exio_write(EXIO_REG_PWM, (uint8_t)((100 - percent) * 255 / 100))) return false;
+    if (on) outputs |= (1 << EXIO_LCD_POWER) | (1 << EXIO_LCD_RESET);
+    outputs = on ? outputs | (1 << EXIO_BACKLIGHT) : outputs & ~(1 << EXIO_BACKLIGHT);
+    return exio_write(EXIO_REG_OUTPUT, outputs);
 }
 
 static esp_err_t gt911_read(uint16_t reg, uint8_t *data, size_t length) {
@@ -70,6 +81,9 @@ static i2c_master_dev_handle_t add_device(uint8_t address) {
 }
 
 esp_lcd_panel_handle_t board_init(void) {
+    // EXT1 leaves its wake pin in the RTC domain after deep sleep.
+    rtc_gpio_hold_dis(PIN_TOUCH_INT);
+    rtc_gpio_deinit(PIN_TOUCH_INT);
     esp_lcd_rgb_panel_config_t panel_config = {
         .clk_src = LCD_CLK_SRC_DEFAULT,
         .timings = {
@@ -99,8 +113,10 @@ esp_lcd_panel_handle_t board_init(void) {
     };
     ESP_ERROR_CHECK(i2c_new_master_bus(&bus_config, &bus));
     exio = add_device(EXIO_ADDRESS);
+    exio_mutex = xSemaphoreCreateMutex();
+    assert(exio_mutex);
     exio_write(EXIO_REG_MODE, 0xff);   // every expander pin is an output
-    // Backlight off until the first frame is drawn; USB rather than CAN.
+    // Panel disabled until the first frame is drawn; USB rather than CAN.
     outputs = (uint8_t)(0xff & ~(1 << EXIO_BACKLIGHT) & ~(1 << EXIO_USB_SELECT));
     exio_write(EXIO_REG_OUTPUT, outputs);
 
@@ -140,7 +156,10 @@ void board_on_touch_interrupt(void (*handler)(void)) {
 /// referenced to 3.3 V (figures from the vendor example).
 float board_battery_volts(void) {
     uint8_t reg = EXIO_REG_ADC, raw[2];
-    if (i2c_master_transmit_receive(exio, &reg, 1, raw, 2, 100) != ESP_OK) return 0;
+    xSemaphoreTake(exio_mutex, portMAX_DELAY);
+    esp_err_t result = i2c_master_transmit_receive(exio, &reg, 1, raw, 2, 100);
+    xSemaphoreGive(exio_mutex);
+    if (result != ESP_OK) return 0;
     return (float)(raw[0] | raw[1] << 8) * 3.0f * 3.3f / 1023.0f;
 }
 
@@ -159,5 +178,63 @@ bool board_read_touches(board_touch_t touches[BOARD_MAX_TOUCHES], int *count) {
         touches[i] = (board_touch_t){ .id = p[0], .x = (uint16_t)(p[1] | p[2] << 8), .y = (uint16_t)(p[3] | p[4] << 8) };
     }
     *count = reported;
+    return true;
+}
+
+// Called only by the touch task, with no contacts down and the session offline.
+// Leave the GT911 powered: its INT pulse is the external RTC wake source.
+bool board_prepare_deep_sleep(void) {
+    uint8_t mode;
+    // GT911 Module_Switch1 bits 1:0: rising, falling, low, high interrupt.
+    if (gt911_read(0x804D, &mode, 1) != ESP_OK) return false;
+    int active = (mode & 3) == 0 || (mode & 3) == 3;
+    if (!board_screen(false, 0)) return false;
+    // EXIO6 controls the panel analog supply; touch has its own 3.3 V supply.
+    outputs &= ~((1 << EXIO_LCD_POWER) | (1 << EXIO_LCD_RESET));
+    if (!exio_write(EXIO_REG_OUTPUT, outputs)) return false;
+
+    // LCD shutdown can leave a release/noise report pending. GT911 repeats
+    // interrupts until status is acknowledged. Drain zero-contact reports AFTER
+    // shutting down the LCD, and require a quiet line before arming RTC wake.
+    // Leave real contacts unread so the touch task can wake on them normally.
+    int64_t started = esp_timer_get_time(), quiet_since = started;
+    bool quiet = false;
+    while (esp_timer_get_time() - started < 750000) {
+        uint8_t status;
+        if (gt911_read(GT911_STATUS, &status, 1) != ESP_OK) return false;
+        int64_t now = esp_timer_get_time();
+        if (status & 0x80) {
+            if (status & 0x0f) return false;
+            uint8_t clear[] = { GT911_STATUS >> 8, GT911_STATUS & 0xff, 0 };
+            if (i2c_master_transmit(gt911, clear, sizeof clear, 50) != ESP_OK) return false;
+            quiet_since = now;
+        }
+        if (gpio_get_level(PIN_TOUCH_INT) == active) quiet_since = now;
+        if (now - started >= 200000 && now - quiet_since >= 100000) { quiet = true; break; }
+        vTaskDelay(pdMS_TO_TICKS(5));
+    }
+    if (!quiet) {
+        ESP_LOGW(TAG, "sleep deferred: touch interrupt not quiet");
+        return false;
+    }
+
+    // Digital GPIO configuration does not configure the RTC pad. GT911 requires
+    // a floating input: explicitly remove the RTC pulls before selecting EXT1.
+    // Keep RTC peripherals powered so the input stays configured during sleep.
+    rtc_gpio_init(PIN_TOUCH_INT);
+    rtc_gpio_set_direction(PIN_TOUCH_INT, RTC_GPIO_MODE_INPUT_ONLY);
+    rtc_gpio_pullup_dis(PIN_TOUCH_INT);
+    rtc_gpio_pulldown_dis(PIN_TOUCH_INT);
+    vTaskDelay(pdMS_TO_TICKS(5));
+    if (rtc_gpio_get_level(PIN_TOUCH_INT) == active) {
+        rtc_gpio_deinit(PIN_TOUCH_INT);
+        return false;
+    }
+    esp_err_t result = esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
+    if (result == ESP_OK) result = esp_sleep_enable_ext1_wakeup_io(1ULL << PIN_TOUCH_INT,
+        active ? ESP_EXT1_WAKEUP_ANY_HIGH : ESP_EXT1_WAKEUP_ANY_LOW);
+    if (result != ESP_OK) { rtc_gpio_deinit(PIN_TOUCH_INT); return false; }
+    ESP_LOGI(TAG, "deep sleep: LCD off, touch mode %u, RTC idle %d, wake level %d", mode & 3,
+             rtc_gpio_get_level(PIN_TOUCH_INT), active);
     return true;
 }

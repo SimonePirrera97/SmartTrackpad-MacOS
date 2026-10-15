@@ -17,10 +17,13 @@ typedef struct { uint8_t id; uint16_t x, y; } board_touch_t;
 esp_lcd_panel_handle_t board_init(void);
 /// True when the controller had a fresh frame; `count` may then be 0 (all lifted).
 bool board_read_touches(board_touch_t touches[BOARD_MAX_TOUCHES], int *count);
-void board_backlight(bool on);
-/// 5...100 percent.
-void board_brightness(int percent);
+/// Vendor GPIO on/off control; restores PWM before enabling, with command settling.
+/// Brightness 5...100 percent when on. False means the caller must retry.
+bool board_screen(bool on, int percent);
 /// Calls `handler` (from interrupt context) whenever the touch controller signals a new frame.
 void board_on_touch_interrupt(void (*handler)(void));
 /// Battery voltage in volts, or 0 if it cannot be read.
 float board_battery_volts(void);
+
+/// Arms GT911 RTC wake and powers down the LCD. Retry after a touch or I2C failure.
+bool board_prepare_deep_sleep(void);

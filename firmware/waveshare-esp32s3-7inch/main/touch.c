@@ -12,7 +12,7 @@
 // touch restores it and is handled normally.
 #define DIM_AFTER_SECONDS 30
 #define DIM_PERCENT 15
-// After this long the backlight, by far the largest consumer, switches off.
+// After this long the backlight switches off. Battery use also enters deep sleep.
 // The power button in the top bar does the same at once, and also goes offline.
 #define SCREEN_OFF_AFTER_SECONDS 300
 
@@ -52,6 +52,15 @@ static void emit(const tp_command_t *command, void *context) {
 
 static TaskHandle_t touch_task_handle;
 static volatile uint32_t interrupts;
+static portMUX_TYPE pointer_lock = portMUX_INITIALIZER_UNLOCKED;
+static ui_pointer_queue_t pointer_queue;
+
+void touch_ui_read(ui_pointer_t *pointer, bool *more) {
+    portENTER_CRITICAL(&pointer_lock);
+    *pointer = ui_pointer_pop(&pointer_queue);
+    *more = pointer_queue.count > 0;
+    portEXIT_CRITICAL(&pointer_lock);
+}
 
 static void IRAM_ATTR on_touch_interrupt(void) {
     BaseType_t woken = pdFALSE;
@@ -67,9 +76,12 @@ static void touch_task(void *unused) {
     tp_touches_t pad = { 0 };
     double last_sample = -1, last_touch = esp_timer_get_time() / 1e6, last_frame = 0;
     // `down`: a finger is on the glass. `waking`: it is the touch that ended sleep.
-    bool dimmed = false, dark = false, down = false, waking = false, host_was_asleep = false;
-    uint8_t applied = 0;
+    bool dimmed = false, dark = false, down = false, waking = app_woke_from_sleep(), host_was_asleep = false;
+    double boot_touch_guard = last_touch + (waking ? 1 : 0), sleep_started = 0;
+    int applied = -1;
+    double last_screen_attempt = -1;
     uint32_t frames = 0, reported = 0;
+    ui_pointer_t pointer = { 0 };
     for (;;) {
         // The controller raises its interrupt line for every report, so the task
         // sleeps until then. The timeouts are a safety net: short while a finger
@@ -100,16 +112,24 @@ static void touch_task(void *unused) {
             down = count > 0;
         }
 
-        // The screen follows the Mac: off when it says it sleeps or its lid is
-        // closed, on again when it connects. A touch in between lights it as after any pause.
+        // A new Mac sleep/lid-close notification takes the same offline/deep-
+        // sleep path as Power. Touch wake can reconnect without retriggering
+        // this old notification; a new session clears g_host_asleep.
         bool host_asleep = g_host_asleep;
         if (host_asleep != host_was_asleep) {
             host_was_asleep = host_asleep;
-            if (host_asleep && !dark) { dark = true; board_backlight(false); }
+            if (host_asleep) {
+                core_lock();
+                tp_engine_cancel(&g_engine, send, NULL);
+                app_sleep();
+                core_unlock();
+                asleep = true;
+                dark = true;
+            }
             if (!host_asleep && !asleep) {
                 last_touch = now;
-                if (dark) { dark = false; board_backlight(true); }
-                if (dimmed) { dimmed = false; applied = 0; }
+                dark = false;
+                dimmed = false;
             }
         }
 
@@ -118,33 +138,58 @@ static void touch_task(void *unused) {
         uint8_t level = app_brightness();
         if (fresh && count > 0 && !asleep) {
             last_touch = now;
-            if (dark) { dark = false; board_backlight(true); }
-            if (dimmed) { dimmed = false; applied = 0; }
+            dark = false;
+            dimmed = false;
         } else if (!dark && (asleep || now - last_touch > SCREEN_OFF_AFTER_SECONDS)) {
             dark = true;
-            board_backlight(false);
         } else if (!dimmed && now - last_touch > DIM_AFTER_SECONDS && level > DIM_PERCENT) {
             dimmed = true;
-            board_brightness(DIM_PERCENT);
         }
-        if (!dimmed && level != applied) { applied = level; board_brightness(level); }
+        // Never mark a failed I2C write applied. Retry while idle too, and always
+        // reapply brightness on wake, including after a dimmed screen went off.
+        int requested = dark ? 0 : dimmed ? (level < DIM_PERCENT ? level : DIM_PERCENT) : level;
+        if (requested != applied && now - last_screen_attempt >= 0.1) {
+            last_screen_attempt = now;
+            if (board_screen(requested > 0, requested)) {
+                ESP_LOGI("screen", "backlight %d%% (idle %.1fs, board asleep %d, Mac asleep %d)",
+                         requested, now - last_touch, asleep, host_asleep);
+                applied = requested;
+            }
+        }
+
+        // Without a Mac sleep notification, normal computer-powered USB stays
+        // online. Battery/wireless idle also sleeps after five minutes.
+        if (!asleep && !down && now - last_touch > SCREEN_OFF_AFTER_SECONDS && (g_route != ROUTE_USB || !usb_link_computer_attached())) {
+            core_lock();
+            tp_engine_cancel(&g_engine, send, NULL);
+            core_unlock();
+            app_sleep();
+            asleep = true;
+        }
+        if (asleep) {
+            if (sleep_started == 0) sleep_started = now;
+            // Allow transport tasks to detach, and the power-button finger to lift.
+            if (!down && now - sleep_started > 2 && now - last_touch > 2) app_enter_deep_sleep();
+        } else sleep_started = 0;
 
         // Nothing reaches the pad or the buttons while asleep, and the touch that
         // wakes the board does only that, until every finger has lifted.
         if (fresh && (asleep || waking)) {
-            if (count == 0) waking = false;
+            if (count == 0 && now >= boot_touch_guard) waking = false;
             count = 0;
         }
 
         if (fresh) {
             bool seen[256] = { 0 };
-            ui_pointer_t pointer = g_ui_pointer;
             pointer.pressed = false;
             pad.count = 0;
             for (int i = 0; i < count; i++) {
                 uint8_t id = raw[i].id;
                 seen[id] = true;
                 if (!present[id]) owner[id] = g_ui_modal || raw[i].x >= PAD_WIDTH || raw[i].y < BAR_HEIGHT ? OWNER_STRIP : OWNER_PAD;
+                // Opening a panel must also take fingers already on the pad.
+                // They stay UI-owned until lifted, even if the panel closes.
+                if (g_ui_modal) owner[id] = OWNER_STRIP;
                 if (owner[id] == OWNER_PAD) {
                     pad.items[pad.count++] = (tp_touch_t){ id, raw[i].x * UNITS_PER_PIXEL, raw[i].y * UNITS_PER_PIXEL };
                 } else if (!pointer.pressed) {
@@ -152,7 +197,10 @@ static void touch_task(void *unused) {
                 }
             }
             for (int id = 0; id < 256; id++) present[id] = seen[id];
-            g_ui_pointer = pointer;
+            portENTER_CRITICAL(&pointer_lock);
+            bool queued = ui_pointer_push(&pointer_queue, pointer);
+            portEXIT_CRITICAL(&pointer_lock);
+            if (!queued) ESP_LOGW("touch", "UI stalled: released pointer and discarded stale touches");
         }
         core_lock();
         double deadline;

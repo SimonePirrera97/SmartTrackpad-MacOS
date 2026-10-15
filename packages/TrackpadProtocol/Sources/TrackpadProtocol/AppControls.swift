@@ -34,7 +34,7 @@ struct AppControlContext: Codable, Sendable, Equatable {
     var actions: [AppControlAction] {
         switch app {
         case .other: []
-        case .vscode: [.save, .compile, .delete]
+        case .vscode: [.save, .delete]
         case .terminal: [.deleteWord, .enter]
         case .safari: [.save, .newTab, .closeTab]
         case .spotify: [.playPause, .previousTrack, .nextTrack, .volumeDown, .volumeUp]

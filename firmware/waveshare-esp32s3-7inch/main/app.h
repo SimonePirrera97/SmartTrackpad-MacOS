@@ -2,6 +2,7 @@
 // The touch and USB tasks take only the core lock, so they never wait on drawing.
 #pragma once
 #include "trackpad_core.h"
+#include "ui_pointer_queue.h"
 
 #define STRIP_WIDTH 280
 #define PAD_WIDTH (1024 - STRIP_WIDTH)
@@ -32,7 +33,7 @@ extern volatile bool g_ui_modal;
 extern volatile bool g_paused;
 /// The user tapped the power button: screen dark and offline until the next touch.
 extern volatile bool g_asleep;
-/// The Mac ended the session because it sleeps or its lid is closed. Screen dark until it connects again.
+/// The Mac ended the session for sleep/lid close; its rising edge requests board deep sleep.
 extern volatile bool g_host_asleep;
 
 void core_lock(void);
@@ -40,8 +41,7 @@ void core_unlock(void);
 uint64_t app_now_ms(void);
 
 /// The contact LVGL sees: only fingers that landed on the button strip.
-typedef struct { bool pressed; int16_t x, y; } ui_pointer_t;
-extern volatile ui_pointer_t g_ui_pointer;
+void touch_ui_read(ui_pointer_t *pointer, bool *more);
 
 /// Which transport currently carries g_session.
 typedef enum { LINK_NONE, LINK_USB, LINK_WIFI, LINK_BLE } app_link_t;
@@ -57,6 +57,8 @@ bool usb_link_open(void);
 void usb_link_poll(void);
 /// A computer is actively driving the USB port (not merely supplying power).
 bool usb_link_host_present(void);
+/// Includes a mounted computer whose USB bus is suspended.
+bool usb_link_computer_attached(void);
 
 // The one route used to reach the Mac; the radio of any other route is off.
 // Not saved: at startup the board settles on USB if a computer drives the port,
@@ -69,7 +71,7 @@ extern volatile bool g_wifi_setup;
 /// Brightness for the current power source, and the setting that holds it.
 uint8_t app_brightness(void);
 void app_set_brightness(uint8_t percent);
-/// Battery charge 0...100, or -1 when no battery can be measured.
+/// Estimated battery charge 0...100, or -1 until a valid voltage is measured.
 extern volatile int g_battery_percent;
 
 // Remembered Mac: the key it handed over by cable, and where to find it.
@@ -129,4 +131,6 @@ void app_set_route(app_route_t route);
 void app_set_paused(bool paused);
 /// Offline with the screen dark until the touch task sees a new touch and wakes.
 void app_sleep(void);
+void app_enter_deep_sleep(void);
+bool app_woke_from_sleep(void);
 void app_wake(void);

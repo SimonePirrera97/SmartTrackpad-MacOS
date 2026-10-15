@@ -37,6 +37,9 @@ static const tusb_desc_device_t device = {
 };
 
 bool usb_link_open(void) { return port_open; }
+// Mounted survives host suspend, unlike tud_ready(): Mac sleep must not turn
+// normal cable operation into touch-only deep sleep.
+bool usb_link_computer_attached(void) { return attached ? tud_mounted() : host_at_detach; }
 bool usb_link_host_present(void) { return attached ? tud_ready() : host_at_detach; }
 
 bool usb_link_write(const uint8_t *bytes, size_t length) {

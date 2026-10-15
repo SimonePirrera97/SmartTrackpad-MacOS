@@ -2,6 +2,7 @@
 // Run from the repository root through scripts/check.sh.
 #include "trackpad_core.h"
 #include "cJSON.h"
+#include "../main/ui_pointer_queue.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -123,6 +124,49 @@ static void pinch_and_balance(void) {
     }
     CHECK(began == 1 && ended == 1 && fabs(product - 2.0) < 1e-6, "pinch began %d ended %d product %f", began, ended, product);
 
+    // Tap, then slide on the second contact: press before motion, release on
+    // lift, never add a click. Plain double taps and disabled drag still work.
+    for (int variant = 0; variant < 5; variant++) {
+        tp_engine_t tapdrag; tp_engine_init(&tapdrag);
+        tapdrag.options.hold_to_drag = false;
+        tapdrag.options.tap_to_drag = variant != 2;
+        list_t events = { 0 };
+        tp_touches_t finger = { .count = 1, .items = { { 1, 100, 100 } } }, none = { 0 };
+        tp_engine_update(&tapdrag, &finger, 0, collect, &events);
+        tp_engine_update(&tapdrag, &none, 0.08, collect, &events);
+        finger.items[0].id = 2;
+        tp_engine_update(&tapdrag, &finger, variant == 3 ? 0.6 : 0.18, collect, &events);
+        if (variant != 1) finger.items[0].x = 130;
+        int before = events.count;
+        tp_engine_update(&tapdrag, &finger, 0.7, collect, &events);
+        if (variant == 0 || variant == 4) {
+            CHECK(events.items[before].kind == TP_BUTTON && events.items[before].pressed, "tap drag must press before moving");
+            CHECK(events.items[before + 1].kind == TP_MOVE, "tap drag motion missing");
+        }
+        if (variant == 4) tp_engine_cancel(&tapdrag, collect, &events);
+        else tp_engine_update(&tapdrag, &none, 0.72, collect, &events);
+        int presses = 0, releases = 0, clicks = 0;
+        for (int i = 0; i < events.count; i++) {
+            tp_command_t c = events.items[i];
+            presses += c.kind == TP_BUTTON && c.pressed;
+            releases += c.kind == TP_BUTTON && !c.pressed;
+            clicks += c.kind == TP_CLICK;
+        }
+        CHECK(presses == (variant == 0 || variant == 4) && presses == releases, "tap drag cleanup variant %d", variant);
+        CHECK(clicks == 1, "tap drag added lift click variant %d", variant);
+    }
+    // Two quick stationary taps retain double-click counting.
+    {
+        tp_engine_t e; tp_engine_init(&e); e.options.tap_to_drag = true; e.options.hold_to_drag = false;
+        list_t events = { 0 };
+        tp_touches_t one = { .count = 1, .items = { { 1, 100, 100 } } }, none = { 0 };
+        tp_engine_update(&e, &one, 0, collect, &events);
+        tp_engine_update(&e, &none, 0.05, collect, &events);
+        tp_engine_update(&e, &one, 0.1, collect, &events);
+        tp_engine_update(&e, &none, 0.15, collect, &events);
+        CHECK(events.items[events.count - 1].kind == TP_CLICK && events.items[events.count - 1].count == 2, "double tap changed");
+    }
+
     // Board defaults: three fingers drag, four fingers drive Mission Control.
     tp_engine_init(&engine);
     engine.options.three_finger_drag = engine.options.mission_control = true;
@@ -242,6 +286,26 @@ static void pinch_and_balance(void) {
 }
 
 int main(void) {
+    ui_pointer_queue_t pointers = { 0 };
+    // A complete quick tap can arrive between two LVGL reads.
+    ui_pointer_push(&pointers, (ui_pointer_t){ true, 800, 120 });
+    ui_pointer_push(&pointers, (ui_pointer_t){ false, 800, 120 });
+    CHECK(ui_pointer_pop(&pointers).pressed, "quick UI tap lost its press");
+    CHECK(!ui_pointer_pop(&pointers).pressed, "quick UI tap lost its release");
+    CHECK(!ui_pointer_pop(&pointers).pressed, "UI must retain released state");
+    // Sustained motion cannot fill the mailbox or erase either edge.
+    for (int i = 0; i < 1000; i++)
+        ui_pointer_push(&pointers, (ui_pointer_t){ true, 800, (int16_t)i });
+    CHECK(pointers.count == 1, "UI motion did not coalesce");
+    ui_pointer_push(&pointers, (ui_pointer_t){ false, 800, 999 });
+    ui_pointer_t point = ui_pointer_pop(&pointers);
+    CHECK(point.pressed && point.y == 999, "UI motion lost its latest position");
+    CHECK(!ui_pointer_pop(&pointers).pressed, "motion lost UI lift");
+    for (int i = 0; i < UI_POINTER_CAPACITY; i++)
+        CHECK(ui_pointer_push(&pointers, (ui_pointer_t){ i % 2 == 0, 900, 200 }), "UI queue filled early");
+    CHECK(!ui_pointer_push(&pointers, (ui_pointer_t){ true, 900, 220 }), "overflow must be reported");
+    CHECK(!ui_pointer_pop(&pointers).pressed, "overflow must release the old UI target");
+    CHECK(ui_pointer_pop(&pointers).pressed, "overflow must preserve the current contact");
     const char *traces[] = { "tap", "drag", "scroll", "interactive-mission-control", "page-swipe" };
     for (int i = 0; i < 5; i++) check_trace(traces[i]);
     pinch_and_balance();
@@ -319,6 +383,6 @@ int main(void) {
     tp_session_receive(&session, (const uint8_t *)resting, strlen(resting), 2010);
     CHECK(session.state == TP_SESSION_IDLE && strcmp(link.reason, tp_mac_resting) == 0, "resting disconnect: %s", link.reason);
 
-    printf("PASS: board core — golden tap/drag/scroll/Mission Control/page-swipe traces, pinch, four-finger Mission Control beside three-finger drag, second finger joining a hold-drag, 40,000 contact-churn frames with balanced cleanup, compact encoding, scroll splitting, cable and pairing handshakes, heartbeat, app context, replay rejection and timeout\n");
+    printf("PASS: board core — quick UI taps, UI motion coalescing and overflow release, golden tap/drag/scroll/Mission Control/page-swipe traces, pinch, four-finger Mission Control beside three-finger drag, second finger joining a hold-drag, 40,000 contact-churn frames with balanced cleanup, compact encoding, scroll splitting, cable and pairing handshakes, heartbeat, app context, replay rejection and timeout\n");
     return 0;
 }

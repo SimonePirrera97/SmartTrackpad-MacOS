@@ -131,6 +131,10 @@ static void rebuild_strip(bool connected, bool has_app, tp_app_t app, uint32_t c
             lv_obj_t *tabs = row(low);
             app_button(tabs, TP_NEW_TAB, true); app_button(tabs, TP_CLOSE_TAB, true);
         }
+        if (app == TP_APP_VSCODE) {
+            lv_obj_t *save_delete = row(low);
+            app_button(save_delete, TP_SAVE, true); app_button(save_delete, TP_DELETE, true);
+        }
         lv_obj_t *pair = row(low);
         if (app == TP_APP_TERMINAL) { app_button(pair, TP_DELETE_WORD, true); app_button(pair, TP_ENTER, true); }
         else if (app == TP_APP_FINDER) { app_button(pair, TP_NEW_FOLDER, true); app_button(pair, TP_TRASH, true); }
@@ -138,9 +142,7 @@ static void rebuild_strip(bool connected, bool has_app, tp_app_t app, uint32_t c
             button(pair, LV_SYMBOL_LEFT, "Undo", BUTTON_ID(BUTTON_ACTION, TP_UNDO), actions);
             button(pair, LV_SYMBOL_RIGHT, "Redo", BUTTON_ID(BUTTON_ACTION, TP_REDO), actions);
         }
-        if (app == TP_APP_VSCODE) {
-            app_button(row(low), TP_SAVE, true); app_button(row(low), TP_COMPILE, true); app_button(row(low), TP_DELETE, true);
-        } else if (app == TP_APP_SAFARI) {
+        if (app == TP_APP_SAFARI) {
             app_button(row(low), TP_SAVE, true);
         }
     }
@@ -181,14 +183,14 @@ static void refresh(lv_timer_t *timer) {
     } else {
         // The built-in font has no middle dot or ellipsis glyphs.
         lv_label_set_text(title, g_dragging ? "Dragging - lift to release"
-                          : (g_hold_pending ? "Hold still to drag..." : "Slide to move - tap to click"));
-        lv_label_set_text(hint, "Two fingers to scroll or right-click - hold to drag");
+                          : (g_hold_pending ? "Tap again and slide to drag" : "Slide to move - tap to click"));
+        lv_label_set_text(hint, "Two fingers to scroll or right-click - tap, tap and slide to drag");
     }
     // Battery cell: charge when a cell is measured, otherwise what powers the board.
     int battery = g_battery_percent;
     if (battery != shown_battery || on_usb != shown_on_usb) {
         shown_battery = battery; shown_on_usb = on_usb;
-        if (battery < 0) lv_label_set_text(battery_label, on_usb ? LV_SYMBOL_USB "  USB power" : LV_SYMBOL_CHARGE "  No battery");
+        if (battery < 0) lv_label_set_text(battery_label, on_usb ? LV_SYMBOL_USB "  Battery ?" : "Battery unknown");
         else {
             const char *icon = battery > 80 ? LV_SYMBOL_BATTERY_FULL : battery > 55 ? LV_SYMBOL_BATTERY_3
                 : battery > 30 ? LV_SYMBOL_BATTERY_2 : battery > 10 ? LV_SYMBOL_BATTERY_1 : LV_SYMBOL_BATTERY_EMPTY;
@@ -590,7 +592,7 @@ static void open_settings(lv_event_t *event) {
     heading(right, "CLICK AND DRAG");
     add_switch(right, "Tap to click", SET_TAP);
     add_switch(right, "Two-finger right-click", SET_TWO_FINGER);
-    add_switch(right, "Hold to drag", SET_HOLD);
+    add_switch(right, "Double-tap drag", SET_HOLD);
     heading(right, "THREE FINGERS: ONE OR THE OTHER");
     add_switch(right, "Three-finger drag", SET_THREE_DRAG);
     add_switch(right, "Page swipes", SET_PAGES);
@@ -683,7 +685,10 @@ static lv_obj_t *top_button(lv_obj_t *parent, const char *text, lv_event_cb_t ac
 
 static void read_pointer(lv_indev_t *device, lv_indev_data_t *data) {
     (void)device;
-    ui_pointer_t pointer = g_ui_pointer;
+    ui_pointer_t pointer;
+    bool more;
+    touch_ui_read(&pointer, &more);
+    data->continue_reading = more;
     data->point.x = pointer.x; data->point.y = pointer.y;
     data->state = pointer.pressed ? LV_INDEV_STATE_PRESSED : LV_INDEV_STATE_RELEASED;
 }

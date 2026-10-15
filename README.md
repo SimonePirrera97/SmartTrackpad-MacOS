@@ -21,7 +21,7 @@ It is two apps: **Smart Trackpad** on the iPad and **Smart Trackpad Companion**,
 A button panel on the right follows the app in front on your Mac:
 
 - **Everywhere:** Copy, Cut, Paste, Undo, Redo, Show Desktop
-- **VS Code:** Save, Compile, Delete
+- **VS Code:** Save and Delete side by side, then Undo/Redo
 - **Safari:** Save, New Tab, Close Tab
 - **Terminal:** Delete Word, Enter
 - **Finder:** New Folder, Move to Trash
@@ -124,15 +124,16 @@ Instead of an iPad you can use a [Waveshare ESP32-S3-Touch-LCD-7B](https://www.w
   - **Connected / Connecting / Disconnected** shows the state; tap it to go offline or back online.
   - **USB / Wi-Fi / Bluetooth** shows the connection in use; tap it to pick another from the menu.
   - **Settings**, and the battery level.
-  - **Power** (the square button in the corner) switches the screen off and stops every connection to save the battery. Touch the screen anywhere to wake the board.
+  - **Power** (the square button in the corner) enters deep sleep after you lift your finger, switching the LCD and processor off. Touch the screen anywhere to restart and reconnect; the wake touch does no action.
 - **Without the cable (experimental):** first, while the board is on the cable, click **Remember this board** in the Mac panel. After that the board connects to that Mac with no key and no approval, whenever the Mac app is running:
   - **Wi-Fi:** on the board open Settings → Wireless, choose your network and type its password once. The board remembers every network it has joined and rejoins whichever is in range.
   - **Bluetooth:** needs no setup.
   - The board uses one connection at a time and never switches by itself. Only when it is switched on does it choose: USB if it is plugged into a computer, otherwise Wi-Fi, otherwise Bluetooth (plugging the cable in during that first minute still selects USB). After that, use the menu in the top row; plugging the cable in later does not change the connection.
   - **Forget** in the Mac panel, or **Forget Mac** on the board, undoes the pairing.
 - **Power:** the board needs a supply of its own when it is not on the Mac: any USB charger or power bank on either USB-C port, a single-cell 3.7 V LiPo battery on the Battery socket (check the polarity printed on the board), or 5 V on the POWER terminal. The top row shows the battery level.
-- **Screen:** the brightness slider in Settings keeps one level for use on a computer's USB port and another, lowest by default, for battery use. The screen dims after 30 seconds without a touch and switches off after five minutes; the next touch brings it back. The screen also switches off when the Mac goes to sleep or you close its lid without another display attached, and comes back when you open it.
-- On the board, Mission Control uses four fingers and three fingers drag, and a **Quit App** button beside Show Desktop quits the app in front. While you hold one finger to drag, a second finger can slide to move the pointer, as on a MacBook trackpad; the drag ends when both fingers have lifted.
+  With a compatible battery connected, USB power also charges it automatically through the board's hardware charger (Waveshare specifies about 580 mA). The board's charging LEDs show charging status; the screen percentage is a voltage estimate and can show full even with no battery fitted.
+- **Screen:** the brightness slider in Settings keeps one level for use on a computer's USB port and another, lowest by default, for battery use. The screen dims after 30 seconds without a touch and switches off after five minutes. On wireless routes or without a computer on USB, the board then enters deep sleep; touch to restart and reconnect. When the Mac sleeps, or you close its lid without another display attached, the board enters the same deep sleep as the power button. Touch the board to wake it after reopening the Mac; opening the lid alone does not wake the board.
+- On the board, Mission Control uses four fingers and three fingers drag, and a **Quit App** button beside Show Desktop quits the app in front. To drag, tap once, then touch again and slide without lifting the second touch. A second finger may join an active drag; the drag ends when both fingers have lifted.
 
 Installing the firmware needs the ESP-IDF toolchain; see [`firmware/waveshare-esp32s3-7inch/README.md`](firmware/waveshare-esp32s3-7inch/README.md).
 

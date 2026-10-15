@@ -235,6 +235,9 @@ void tp_engine_update(tp_engine_t *e, const tp_touches_t *touches, double time, 
     bool has_pointer = pointer_update(e, touches, &pointer_dx, &pointer_dy);
 
     if (e->previous.count == 0 && touches->count > 0) {
+        e->tap_drag_candidate = o->tap_to_drag && o->tap_to_click && touches->count == 1
+            && e->tap_has && e->tap_count == 1 && time - e->tap_time <= 0.35
+            && hypot(touches->items[0].x - e->tap_x, touches->items[0].y - e->tap_y) <= 30;
         e->began = time; e->peak = 0; e->travel = 0; e->origins = *touches; e->suppressed = false;
         tp_command_t stop = command(TP_STOP_MOMENTUM); emit(&stop, context);
     }
@@ -248,6 +251,7 @@ void tp_engine_update(tp_engine_t *e, const tp_touches_t *touches, double time, 
         if (origin) e->travel = fmax(e->travel, hypot(point->x - origin->x, point->y - origin->y));
     }
     if (touches->count > e->peak) e->peak = touches->count;
+    if (e->peak > 1) e->tap_drag_candidate = false;
     if (e->peak > 1 || e->travel > o->movement_threshold) e->tap_has = false;
     bool pages = o->page_swipes && !o->three_finger_drag;
     int mission = !o->mission_control ? 0 : (o->mission_fingers == 4 ? 4 : (o->three_finger_drag ? 0 : 3));
@@ -375,7 +379,8 @@ void tp_engine_update(tp_engine_t *e, const tp_touches_t *touches, double time, 
         if (!e->anchor_has || hypot(point->x - e->anchor_x, point->y - e->anchor_y) > o->movement_threshold) {
             e->anchor_has = true; e->anchor_x = point->x; e->anchor_y = point->y; e->anchor_time = time;
         }
-        if (!e->dragging && o->hold_to_drag && time >= e->anchor_time + o->hold_duration) {
+        if (!e->dragging && ((o->hold_to_drag && time >= e->anchor_time + o->hold_duration)
+            || (e->tap_drag_candidate && e->travel > o->movement_threshold))) {
             emit_button(emit, context, true); e->dragging = true; e->drag_contacts = 1; e->tap_has = false;
         }
         if (has_pointer) {

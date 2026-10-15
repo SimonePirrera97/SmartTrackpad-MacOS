@@ -65,6 +65,8 @@ typedef struct {
     /// the button stays down until both have lifted. Off on the iPad, where a
     /// second finger ends the drag.
     bool drag_second_finger;
+    /// Tap once, then slide with the second contact to drag. Off by default.
+    bool tap_to_drag;
     double hold_duration, tap_duration, movement_threshold;
 } tp_options_t;
 
@@ -74,6 +76,7 @@ typedef struct {
     tp_touches_t previous, origins;
     bool pointer_has; int pointer_id; double pointer_x, pointer_y;
     double began; int peak; double travel;
+    bool tap_drag_candidate;
     bool dragging; int drag_contacts; bool scrolling, suppressed;
     bool tap_has; double tap_time, tap_x, tap_y; int tap_count;
     bool updated; double last_update;
