@@ -3,6 +3,7 @@ import Foundation
 import Combine
 import Network
 import Darwin
+import IOKit
 
 /// USB byte-stream adapter: a board's CDC serial port, or a cabled iPad reached
 /// through USBMux. It relays the direct session byte stream to a loopback socket.
@@ -20,12 +21,38 @@ final class USBSerialTransport: ObservableObject {
     private var relay: StreamByteRelay?
     private var pending = Data()
     private var completion: (() -> Void)?
+    private var uartProbe: Task<Void, Never>?
+    private var awaitingUART = false
+    var sessionReady: Bool { opened && !awaitingUART }
+    private var greeting = Data()
+    private static let uartReady = Data("STPAD-UART/1!\n".utf8)
+
+    /// Only probe CH343 bridges, then require the firmware's explicit greeting.
+    static var uartPorts: [String] {
+        var iterator: io_iterator_t = 0
+        guard IOServiceGetMatchingServices(kIOMainPortDefault, IOServiceMatching("IOUSBHostDevice"), &iterator) == KERN_SUCCESS else { return [] }
+        defer { IOObjectRelease(iterator) }
+        var result: [String] = []
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: "/dev")) ?? []
+        while case let device = IOIteratorNext(iterator), device != 0 {
+            defer { IOObjectRelease(device) }
+            func property(_ key: String) -> Any? {
+                IORegistryEntryCreateCFProperty(device, key as CFString, kCFAllocatorDefault, 0)?.takeRetainedValue()
+            }
+            guard (property("idVendor") as? NSNumber)?.intValue == 0x1A86,
+                  (property("idProduct") as? NSNumber)?.intValue == 0x55D3,
+                  let serial = property("USB Serial Number") as? String, !serial.isEmpty else { continue }
+            result += names.filter { $0.hasPrefix("cu.usbmodem" + serial) || $0.hasPrefix("cu.usbserial-" + serial) }.map { "/dev/" + $0 }
+        }
+        return result.sorted()
+    }
 
     /// The dedicated board names itself through its USB serial number, which
     /// macOS puts in the device name, so it is found without a port picker.
     static var boardPort: String? {
-        ((try? FileManager.default.contentsOfDirectory(atPath: "/dev")) ?? [])
+        let native = ((try? FileManager.default.contentsOfDirectory(atPath: "/dev")) ?? [])
             .filter { $0.hasPrefix("cu.usbmodemSmartTrackpad") }.sorted().first.map { "/dev/" + $0 }
+        return native ?? uartPorts.first
     }
 
     func refresh() {
@@ -43,15 +70,34 @@ final class USBSerialTransport: ObservableObject {
         var attributes = termios()
         guard tcgetattr(fd, &attributes) == 0 else { Darwin.close(fd); status = "Cannot configure USB port"; return }
         cfmakeraw(&attributes)
-        cfsetspeed(&attributes, speed_t(B115200))
+        let uart = Self.uartPorts.contains(path)
+        cfsetspeed(&attributes, speed_t(uart ? B230400 : B115200))
         attributes.c_cflag |= tcflag_t(CLOCAL | CREAD)
+        attributes.c_cflag &= ~tcflag_t(HUPCL | CRTSCTS)
         guard tcsetattr(fd, TCSANOW, &attributes) == 0 else { Darwin.close(fd); status = "Cannot configure USB port"; return }
-        relay(descriptor: fd, name: "Board USB", targetPort: targetPort)
-        status = "Board USB open · 115200 baud · waiting for board session"
+        relay(descriptor: fd, name: uart ? "Board UART USB" : "Board USB", targetPort: targetPort, uartHandshake: uart)
+        status = uart ? "Board UART USB · identifying firmware" : "Board USB open · waiting for board session"
+    }
+
+    private func probeUART() {
+        awaitingUART = true
+        let currentGeneration = generation
+        uartProbe = Task { [weak self] in
+            for _ in 0..<20 {
+                guard let self, self.generation == currentGeneration, self.awaitingUART else { return }
+                if self.pending.isEmpty {
+                    self.pending = Data("STPAD-UART/1?\n".utf8)
+                    self.flush()
+                }
+                try? await Task.sleep(for: .milliseconds(500))
+            }
+            guard let self, self.generation == currentGeneration, self.awaitingUART else { return }
+            self.fail("No Smart Trackpad response on UART · choose USB on the board")
+        }
     }
 
     /// Takes ownership of an open, non-blocking descriptor.
-    func relay(descriptor fd: Int32, name: String, targetPort: UInt16) {
+    func relay(descriptor fd: Int32, name: String, targetPort: UInt16, uartHandshake: Bool = false) {
         stop()
         self.name = name
         let currentGeneration = generation
@@ -80,11 +126,14 @@ final class USBSerialTransport: ObservableObject {
         }
         readSource.setCancelHandler { Darwin.close(fd) }
         readSource.resume()
-        next.start()
+        if !uartHandshake { next.start() }
         status = "\(name) open"
+        if uartHandshake { probeUART() }
     }
 
     func stop() {
+        uartProbe?.cancel(); uartProbe = nil
+        awaitingUART = false; greeting = Data()
         generation = UUID()
         opened = false
         let oldReader = reader
@@ -104,7 +153,22 @@ final class USBSerialTransport: ObservableObject {
         guard descriptor == fd else { return }
         var bytes = [UInt8](repeating: 0, count: 4096)
         let count = Darwin.read(fd, &bytes, bytes.count)
-        if count > 0 { relay?.accept(Data(bytes.prefix(count))) }
+        if count > 0 {
+            let data = Data(bytes.prefix(count))
+            if awaitingUART {
+                greeting.append(data)
+                if let range = greeting.range(of: Self.uartReady) {
+                    let remaining = Data(greeting[range.upperBound...])
+                    awaitingUART = false; greeting = Data()
+                    uartProbe?.cancel(); uartProbe = nil
+                    status = "Board UART USB · 230400 baud"
+                    relay?.start()
+                    if !remaining.isEmpty { relay?.accept(remaining) }
+                } else if greeting.count > 4096 {
+                    greeting = Data(greeting.suffix(Self.uartReady.count - 1))
+                }
+            } else { relay?.accept(data) }
+        }
         else if count == 0 || (errno != EAGAIN && errno != EINTR) { fail("\(name) disconnected") }
     }
     private func flush() {

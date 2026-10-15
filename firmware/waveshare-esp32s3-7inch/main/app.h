@@ -50,6 +50,9 @@ extern volatile app_link_t g_link;
 void touch_start(void);
 void ui_start(void);
 void usb_link_start(void);
+void uart_link_start(void);
+bool uart_link_open(void);
+bool uart_link_write(const uint8_t *bytes, size_t length);
 bool usb_link_write(const uint8_t *bytes, size_t length);
 /// The Mac has the serial port open.
 bool usb_link_open(void);

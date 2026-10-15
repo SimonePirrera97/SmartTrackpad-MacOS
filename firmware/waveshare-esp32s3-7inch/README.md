@@ -26,6 +26,7 @@ acceptance remain pending.
 |---|---|
 | Gesture engine (C port of `packages/GestureCore`), checked against the shared golden traces | `components/trackpad_core/gesture.c` |
 | Compact input encoding, command validity | `components/trackpad_core/protocol.c` |
+| CH343 UART charge-and-data session adapter | `main/uart_link.c` |
 | Session: handshake, heartbeat, app context, timeouts, key hand-over | `components/trackpad_core/session.c` |
 | Display, IO extension chip, GT911 multi-touch, backlight, battery voltage | `main/board.c` |
 | Touch task: interrupt-driven reading, routing (pad → engine, bar and strip → LVGL), dimming | `main/touch.c` |
@@ -78,7 +79,7 @@ else, that is a bug, not a variant.
   both radios off. Wi-Fi or Bluetooth: the other radio off, and the board leaves the USB
   bus. Plugging or unplugging the cable changes nothing; a route that drops is retried,
   not replaced.
-- **At startup only**, in this order: USB if a computer drives the USB port within 4 s of
+- **At startup only**, in this order: USB if a computer drives either wired port within 8 s of
   power-on; otherwise Wi-Fi for 25 s; otherwise Bluetooth for 40 s; if neither produced a
   session, back to USB. The first session ends the search, and so does picking a route,
   Disconnect or the power button. An unpaired board stays on USB. During the search the
@@ -220,8 +221,13 @@ idf.py build
 idf.py -p /dev/cu.<port> flash monitor   # port marked "USB TO UART"
 ```
 
-The two USB-C ports have different jobs. **USB TO UART** is for flashing and logs.
-**USB** is the trackpad connection to the Mac; nothing but session bytes may appear on it.
+**USB TO UART** supports flashing and a one-cable trackpad connection with battery
+charging (switch on UART1). Boot logs use 115200 baud; the application owns UART0 at
+230400 baud, suppresses runtime console logs and answers `STPAD-UART/1?` with
+`STPAD-UART/1!` (both newline terminated) before starting the usual direct session.
+Close the companion before flashing or opening a serial tool. `idf.py monitor`
+can read boot logs but is not a runtime log console for this firmware.
+**USB** remains the native CDC trackpad connection and powers the board without charging.
 
 `bash scripts/check.sh` at the repository root runs the desktop checks of the portable core.
 

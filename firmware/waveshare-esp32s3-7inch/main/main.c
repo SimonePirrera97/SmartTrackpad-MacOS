@@ -86,7 +86,7 @@ bool app_usb_wanted(void) { return !g_paused && (g_route == ROUTE_USB || !route_
 /// board stays on the USB bus meanwhile, so a computer that is slow to start, or
 /// a cable plugged in a little late, still gets USB.
 static void pick_startup_route(uint64_t now) {
-    const uint64_t usb_window = 4000, wifi_window = 25000, bluetooth_window = 40000;
+    const uint64_t usb_window = 8000, wifi_window = 25000, bluetooth_window = 40000;
     static uint64_t step_started;   // the USB step starts at power-on
     if (route_settled) return;
     uint64_t waited = now - step_started;
@@ -386,5 +386,6 @@ void app_main(void) {
     // Bluetooth first: its controller needs internal RAM, Wi-Fi can use PSRAM.
     ble_link_start();
     wifi_link_start();
+    uart_link_start();
     touch_start();
 }

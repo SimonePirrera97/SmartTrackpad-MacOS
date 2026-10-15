@@ -86,7 +86,7 @@ final class ConnectionModel: ObservableObject {
     /// The board's serial port is relayed through a loopback socket.
     private var boardSerialOpen: Bool {
         #if os(macOS)
-        boardUSB.opened
+        boardUSB.sessionReady
         #else
         false
         #endif
@@ -301,7 +301,7 @@ final class ConnectionModel: ObservableObject {
             next.newConnectionHandler = { [weak self, weak next] peer in
                 Task { @MainActor in
                     guard let self, let next, self.serialListener === next,
-                          self.boardUSB.opened || self.cableUSB.opened, !self.active else { peer.cancel(); return }
+                          self.boardUSB.sessionReady || self.cableUSB.opened, !self.active else { peer.cancel(); return }
                     self.attach(peer, directCable: true)
                 }
             }

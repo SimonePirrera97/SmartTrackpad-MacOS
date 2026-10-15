@@ -39,10 +39,11 @@ static const tusb_desc_device_t device = {
 bool usb_link_open(void) { return port_open; }
 // Mounted survives host suspend, unlike tud_ready(): Mac sleep must not turn
 // normal cable operation into touch-only deep sleep.
-bool usb_link_computer_attached(void) { return attached ? tud_mounted() : host_at_detach; }
-bool usb_link_host_present(void) { return attached ? tud_ready() : host_at_detach; }
+bool usb_link_computer_attached(void) { return uart_link_open() || (attached ? tud_mounted() : host_at_detach); }
+bool usb_link_host_present(void) { return uart_link_open() || (attached ? tud_ready() : host_at_detach); }
 
 bool usb_link_write(const uint8_t *bytes, size_t length) {
+    if (uart_link_open()) return uart_link_write(bytes, length);
     if (tinyusb_cdcacm_write_queue(TINYUSB_CDC_ACM_0, bytes, length) != length) return false;
     tinyusb_cdcacm_write_flush(TINYUSB_CDC_ACM_0, 0);
     return true;
@@ -54,13 +55,14 @@ static void received(int port, cdcacm_event_t *event) {
     size_t length = 0;
     while (tinyusb_cdcacm_read(port, bytes, sizeof bytes, &length) == ESP_OK && length > 0) {
         core_lock();
-        tp_session_receive(&g_session, bytes, length, app_now_ms());
+        if (!uart_link_open() && g_link == LINK_USB) tp_session_receive(&g_session, bytes, length, app_now_ms());
         core_unlock();
     }
 }
 
 /// The Mac opened the port: start a session on it. Core lock held.
 static void begin(void) {
+    if (uart_link_open()) return;
     begin_waiting = port_open && attached && g_route != ROUTE_USB;
     if (!port_open || !attached || begin_waiting) return;
     if (g_session.state != TP_SESSION_IDLE) return;
@@ -78,7 +80,7 @@ static void line_state(int port, cdcacm_event_t *event) {
     if (port_open) begin();
     else {
         begin_waiting = false;
-        if (g_link == LINK_USB) tp_session_stop(&g_session, g_paused ? "Disconnected" : "Waiting for the Mac");
+        if (g_link == LINK_USB && !uart_link_open()) tp_session_stop(&g_session, g_paused ? "Disconnected" : "Waiting for the Mac");
     }
     core_unlock();
 }
@@ -116,7 +118,7 @@ void usb_link_poll(void) {
         g_ui_dirty = true;
         ESP_LOGI(TAG, "USB bus %s", ready ? "active" : "quiet (unplugged or host asleep)");
     }
-    if (!port_open || ready) return;
+    if (uart_link_open() || !port_open || ready) return;
     port_open = false;
     if (g_link == LINK_USB) tp_session_stop(&g_session, "Waiting for the Mac");
 }
