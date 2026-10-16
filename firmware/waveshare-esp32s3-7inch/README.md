@@ -20,6 +20,11 @@ VS Code Save/Delete row are implemented; build/flash evidence is recorded in
 `docs/developer-notes.md`. Sleep current, overnight endurance and physical wake/drag
 acceptance remain pending.
 
+**Fixed, 2026-10-16:** screen shimmer. The panel refreshed at only 26 Hz (24 MHz pixel
+clock); a phone video measured the flicker at that frequency. The pixel clock is now
+36 MHz (39 Hz refresh). The user confirms the flicker is gone and the image stays
+stable. Details in `docs/developer-notes.md`.
+
 ## What exists
 
 | Part | File |
@@ -292,7 +297,7 @@ Each step isolates one untested layer; stop at the first failure and read the lo
 
 User confirmed the model: **ESP32-S3-Touch-LCD-7B** (ESP32-S3-WROOM-1-N16R8, 16 MB flash, 8 MB octal PSRAM). Toolchain: ESP-IDF v5.5.5 in `~/esp/esp-idf`. From the [Waveshare wiki](https://www.waveshare.com/wiki/ESP32-S3-Touch-LCD-7B), not yet verified on the hardware:
 
-- Display: 1024×600 IPS, 16-bit RGB (ST7262). R3–R7 = GPIO 1, 2, 42, 41, 40; G2–G7 = 39, 0, 45, 48, 47, 21; B3–B7 = 14, 38, 18, 17, 10; HSYNC 46, VSYNC 3, DE 5, PCLK 7. Timings come from the vendor demo/schematic.
+- Display: 1024×600 IPS, 16-bit RGB (ST7262). R3–R7 = GPIO 1, 2, 42, 41, 40; G2–G7 = 39, 0, 45, 48, 47, 21; B3–B7 = 14, 38, 18, 17, 10; HSYNC 46, VSYNC 3, DE 5, PCLK 7. Porch timings come from the vendor demo/schematic; the pixel clock is 36 MHz (1386 × 661 clocks per frame, 39.3 Hz). The earlier 24 MHz (26 Hz) flickered visibly; going faster costs PSRAM bandwidth, so recheck image stability under Wi-Fi load if it is raised again.
 - Touch: GT911, five points, I2C SDA 8 / SCL 9, address 0x5D, INT GPIO 4, reset on expander EXIO1.
 - IO extension chip at I2C 0x24 (same bus): EXIO1 touch reset, EXIO2 backlight enable, EXIO4 SD CS, EXIO5 USB/CAN select (low = USB), EXIO6 LCD VDD enable. Also brightness and battery voltage; register protocol comes from the vendor demo.
 - Native USB on GPIO 19/20 (shared with CAN, so EXIO5 must be low); second USB-C is a CH343 USB-to-UART bridge for flashing and logs.

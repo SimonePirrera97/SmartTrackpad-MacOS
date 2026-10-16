@@ -87,7 +87,9 @@ esp_lcd_panel_handle_t board_init(void) {
     esp_lcd_rgb_panel_config_t panel_config = {
         .clk_src = LCD_CLK_SRC_DEFAULT,
         .timings = {
-            .pclk_hz = 24 * 1000 * 1000, .h_res = BOARD_H_RES, .v_res = BOARD_V_RES,
+            // 36 MHz / (1386 x 661) = 39.3 Hz refresh. 24 MHz (26 Hz) shimmered
+            // visibly; faster clocks compete with PSRAM for bandwidth.
+            .pclk_hz = 36 * 1000 * 1000, .h_res = BOARD_H_RES, .v_res = BOARD_V_RES,
             .hsync_pulse_width = 162, .hsync_back_porch = 152, .hsync_front_porch = 48,
             .vsync_pulse_width = 45, .vsync_back_porch = 13, .vsync_front_porch = 3,
             .flags = { .pclk_active_neg = 1 },
