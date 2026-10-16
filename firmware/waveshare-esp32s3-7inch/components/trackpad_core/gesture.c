@@ -383,7 +383,10 @@ void tp_engine_update(tp_engine_t *e, const tp_touches_t *touches, double time, 
             || (e->tap_drag_candidate && e->travel > o->movement_threshold))) {
             emit_button(emit, context, true); e->dragging = true; e->drag_contacts = 1; e->tap_has = false;
         }
-        if (has_pointer) {
+        // Keep the cursor on a narrow target while the second touch is still
+        // being classified. Otherwise its first few pixels leave a divider
+        // before the button-down that starts the drag.
+        if (has_pointer && (!e->tap_drag_candidate || e->dragging)) {
             tp_command_t move = command(TP_MOVE); move.dx = pointer_dx; move.dy = pointer_dy; emit(&move, context);
         }
     } else if (!e->suppressed && touches->count == 3 && o->three_finger_drag

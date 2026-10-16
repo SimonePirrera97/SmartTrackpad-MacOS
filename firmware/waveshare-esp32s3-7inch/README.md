@@ -27,6 +27,9 @@ stable. Details in `docs/developer-notes.md`.
 
 ## What exists
 
+**Fixed, 2026-10-16:** double-tap slide dragging now grabs narrow dividers before
+moving the pointer. User confirmed VS Code sidebar resizing works on the board.
+
 | Part | File |
 |---|---|
 | Gesture engine (C port of `packages/GestureCore`), checked against the shared golden traces | `components/trackpad_core/gesture.c` |

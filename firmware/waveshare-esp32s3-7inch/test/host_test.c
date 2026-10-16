@@ -155,6 +155,30 @@ static void pinch_and_balance(void) {
         CHECK(presses == (variant == 0 || variant == 4) && presses == releases, "tap drag cleanup variant %d", variant);
         CHECK(clicks == 1, "tap drag added lift click variant %d", variant);
     }
+    // A slow second-touch slide must grab a narrow divider before any motion.
+    {
+        tp_engine_t e; tp_engine_init(&e); e.options.tap_to_drag = true; e.options.hold_to_drag = false;
+        list_t events = { 0 };
+        tp_touches_t one = { .count = 1, .items = { { 1, 100, 100 } } }, none = { 0 };
+        tp_engine_update(&e, &one, 0, collect, &events);
+        tp_engine_update(&e, &none, 0.05, collect, &events);
+        one.items[0].id = 2;
+        tp_engine_update(&e, &one, 0.1, collect, &events);
+        int before = events.count;
+        for (int step = 1; step <= 6; step++) {
+            one.items[0].x = 100 + step * 2;
+            tp_engine_update(&e, &one, 0.1 + step * 0.02, collect, &events);
+        }
+        CHECK(events.count == before, "tap drag moved off target before pressing");
+        one.items[0].x = 114;
+        tp_engine_update(&e, &one, 0.24, collect, &events);
+        CHECK(events.count == before + 2 && events.items[before].kind == TP_BUTTON
+              && events.items[before].pressed && events.items[before + 1].kind == TP_MOVE,
+              "slow tap drag must press before its first movement");
+        tp_engine_update(&e, &none, 0.3, collect, &events);
+        CHECK(events.items[events.count - 1].kind == TP_BUTTON && !events.items[events.count - 1].pressed,
+              "slow tap drag must release on lift");
+    }
     // Two quick stationary taps retain double-click counting.
     {
         tp_engine_t e; tp_engine_init(&e); e.options.tap_to_drag = true; e.options.hold_to_drag = false;
